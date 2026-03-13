@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Web Modular Synth Playground
+
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Web Audio API](https://img.shields.io/badge/Web_Audio_API-FF6347?style=for-the-badge)
+
+**Interactive modular synthesizer simulator** built as a web extension of my artist landing page ([ritasilva.online](https://www.ritasilva.online/)).  
+Patch modules, turn knobs, connect ports, and hear real-time audio in your browser.
+
+---
+
+## Features
+
+- Fully functional **modular synth engine** with real-time audio
+- **Rack container** with interactive modules
+- **Included modules:** Clock, Sequencer, ADSR, LFO, Oscillator, Filter, VCA, Reverb, Delay, Mixer
+- **Interactive controls:** knobs, buttons, digital displays
+- Patch your own modular synth using cables directly in the browser
+- Real-time **modulation and audio synthesis**
+
+---
+
+## Tech Stack
+
+- **Frontend:** Next.js, React, Tailwind CSS
+- **Audio Engine:** Web Audio API
+- **State Management:** React hooks and modular components
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone the repository
 
-```bash
+``bash
+git clone https://github.com/teu-username/eurorack-web-modules.git
+cd eurorack-web-modules
+
+### 2. Install dependencies
+
+npm install
+
+# or
+
+yarn install
+
+### 3. Run the development server
+
 npm run dev
+
 # or
+
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 to see the synth in action.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How to use
 
-## Learn More
+- Connect ports (CV and audio jacks) to create your modular synth patch
+- Or simply select auto-patch to load a fully generated and working patch
+- Turn knobs to adjust parameters (frequency, filter, LFO, ADSR, etc.)
+- Play sequences, modulate signals, and listen to live audio output
+- Have fun!
 
-To learn more about Next.js, take a look at the following resources:
+## To do next:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Adjust UI to align all modules and their content
+- Create a mobile-friendly responsive layout
+- Load presets
+- Additional modules: Sampler (with audio input from user device's microphone), Granular fx, Looper, Harmonic-Oscillator, Complex-Oscillator, Low Pass Gate, Reverse Reverb, Sample and Hold, Function Generator, Noise Generator.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+All rights reserved by Rita Silva.
