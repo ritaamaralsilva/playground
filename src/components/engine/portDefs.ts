@@ -1,0 +1,26 @@
+import type { PortDef } from "./types"
+
+export const ALL_PORT_DEFS: PortDef[] = [
+  { id: "clock-out", label: "out", type: "output" },
+  { id: "seq-clock-in", label: "clk in", type: "input" },
+  { id: "seq-cv-out", label: "cv out", type: "output" },
+  { id: "seq-gate-out", label: "gate out", type: "output" },
+  { id: "adsr-gate-in", label: "gate in", type: "input" },
+  { id: "adsr-env-out", label: "env out", type: "output" },
+  { id: "lfo-out", label: "out", type: "output" },
+  { id: "osc-voct-in", label: "v/oct in", type: "input" },
+  { id: "osc-fm-in", label: "fm in", type: "input" },
+  { id: "osc-out", label: "out", type: "output" },
+  { id: "filter-audio-in", label: "audio in", type: "input" },
+  { id: "filter-cv-in", label: "cv in", type: "input" },
+  { id: "filter-audio-out", label: "audio out", type: "output" },
+  { id: "vca-cv-in", label: "cv in", type: "input" },
+  { id: "vca-audio-in", label: "audio in", type: "input" },
+  { id: "vca-out", label: "out", type: "output" },
+  { id: "reverb-audio-in", label: "audio in", type: "input" },
+  { id: "reverb-audio-out", label: "audio out", type: "output" },
+  { id: "delay-clock-in", label: "clk in", type: "input" },
+  { id: "delay-audio-in", label: "audio in", type: "input" },
+  { id: "delay-audio-out", label: "audio out", type: "output" },
+  { id: "out-in", label: "in", type: "input" },
+]
