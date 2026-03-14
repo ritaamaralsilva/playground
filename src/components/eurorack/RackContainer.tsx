@@ -628,7 +628,11 @@ export default function RackContainer() {
     )
   }, [reverbMix])
   useEffect(() => {
-    if (delayNode.current && ctx.current)
+    if (
+      delayNode.current &&
+      ctx.current &&
+      !linked("delay-clock-in", "clock-out")
+    )
       delayNode.current.delayTime.setTargetAtTime(
         delayTime,
         ctx.current.currentTime,
@@ -659,20 +663,30 @@ export default function RackContainer() {
       )
   }, [delayMix])
   useEffect(() => {
-    const t = 60 / bpm / ppDivision
     if (!ctx.current) return
-    if (ppDelayL.current)
-      ppDelayL.current.delayTime.setTargetAtTime(
-        t,
-        ctx.current.currentTime,
-        0.01
-      )
-    if (ppDelayR.current)
-      ppDelayR.current.delayTime.setTargetAtTime(
-        t * 2,
-        ctx.current.currentTime,
-        0.01
-      )
+    const clocked = linked("delay-clock-in", "clock-out")
+    const t = 60 / bpm / ppDivision
+    // Ping pong: sync to BPM only when clock-in is patched, otherwise use current value to avoid clicks
+    if (clocked) {
+      if (ppDelayL.current)
+        ppDelayL.current.delayTime.setTargetAtTime(
+          t,
+          ctx.current.currentTime,
+          0.01
+        )
+      if (ppDelayR.current)
+        ppDelayR.current.delayTime.setTargetAtTime(
+          t * 2,
+          ctx.current.currentTime,
+          0.01
+        )
+      if (delayNode.current)
+        delayNode.current.delayTime.setTargetAtTime(
+          60 / bpm,
+          ctx.current.currentTime,
+          0.01
+        )
+    }
   }, [bpm, ppDivision])
   useEffect(() => {
     if (ctx.current) syncGraph(cables)
@@ -1635,16 +1649,27 @@ export default function RackContainer() {
                 </span>
               </div>
             )}
-            {!pingPong && (
-              <Knob
-                value={delayTime}
-                min={0.01}
-                max={2}
-                label="time"
-                sublabel={`${delayTime.toFixed(2)}s`}
-                onChange={setDelayTime}
-              />
-            )}
+            {!pingPong &&
+              (linked("delay-clock-in", "clock-out") ? (
+                <span
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: "8px",
+                    color: "#6a5030",
+                  }}
+                >
+                  {(60000 / bpm).toFixed(0)}ms @ {Math.round(bpm)} bpm
+                </span>
+              ) : (
+                <Knob
+                  value={delayTime}
+                  min={0.01}
+                  max={2}
+                  label="time"
+                  sublabel={`${delayTime.toFixed(2)}s`}
+                  onChange={setDelayTime}
+                />
+              ))}
             <Knob
               value={delayFb}
               min={0}
