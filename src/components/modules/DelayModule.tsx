@@ -35,7 +35,7 @@ export function DelayModule({
   mkPort,
 }: DelayModuleProps) {
   return (
-    <ModuleFrontPanel title="delay" width={140} color="#1a1a1c">
+    <ModuleFrontPanel title="delay" width={140}>
       {/* Mode toggle */}
       <div className="flex gap-1 w-full">
         <button

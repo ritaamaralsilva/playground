@@ -49,18 +49,20 @@ export function Knob({
   return (
     <div
       className="flex flex-col items-center"
-      style={{ minWidth: size + 6, gap: "4px" }}
+      style={{ minWidth: size + 20, gap: "6px" }}
     >
       {/* Label above knob */}
       <span
         style={{
           fontFamily: "'DM Mono', 'Courier New', monospace",
-          fontSize: "8px",
-          fontWeight: 500,
+          fontSize: "9px",
+          fontWeight: 700,
           letterSpacing: "0.18em",
           textTransform: "uppercase",
           color: "#c8c0b0",
           lineHeight: 1,
+          textAlign: "center",
+          whiteSpace: "nowrap",
         }}
       >
         {label}
@@ -109,11 +111,13 @@ export function Knob({
       <span
         style={{
           fontFamily: "'DM Mono', 'Courier New', monospace",
-          fontSize: "7px",
-          fontWeight: 400,
-          letterSpacing: "0.08em",
+          fontSize: "10px",
+          fontWeight: 700,
+          letterSpacing: "0.10em",
           color: "#7a6a50",
           lineHeight: 1,
+          textAlign: "center",
+          whiteSpace: "nowrap",
         }}
       >
         {sublabel}

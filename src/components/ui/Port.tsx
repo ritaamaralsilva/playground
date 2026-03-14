@@ -42,8 +42,8 @@ export function Port({
         onClick={() => onClick(def.id)}
         className="rounded-full cursor-crosshair flex-shrink-0 flex items-center justify-center"
         style={{
-          width: 16,
-          height: 16,
+          width: 12,
+          height: 12,
           background: connected
             ? "#0a0a0a"
             : `radial-gradient(circle at 38% 30%, #3a3632, #1a1816)`,
@@ -74,13 +74,13 @@ export function Port({
       <span
         style={{
           fontFamily: "'DM Mono', 'Courier New', monospace",
-          fontSize: "7px",
-          fontWeight: 400,
-          letterSpacing: "0.12em",
+          fontSize: "6px",
+          fontWeight: 600,
+          letterSpacing: "0.08em",
           textTransform: "uppercase",
           color: connected ? "#b0a898" : "#6e6860",
           lineHeight: 1,
-          maxWidth: 48,
+          maxWidth: 44,
           overflow: "hidden",
           textOverflow: "ellipsis",
         }}

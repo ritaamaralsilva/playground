@@ -5,7 +5,6 @@ import type { PortId, PortDef, Cable, Point } from "../engine/types"
 import {
   CABLE_COLORS,
   WAVEFORMS,
-  SCALES,
   SCALE_NAMES,
   ROOT_NOTES,
 } from "../engine/constants"
@@ -15,7 +14,27 @@ import { Knob } from "../ui/Knob"
 import { Port } from "../ui/Port"
 import { DigitalDisplay } from "../ui/DigitalDisplay"
 import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
-import { init } from "next/dist/compiled/webpack/webpack"
+
+// Shared inline styles for small section labels and arrow buttons
+// (hex colors cannot be used as Tailwind classNames)
+const labelStyle: React.CSSProperties = {
+  fontFamily: "'DM Mono', 'Courier New', monospace",
+  fontSize: "8px",
+  color: "#6e6860",
+  letterSpacing: "0.15em",
+  textTransform: "uppercase",
+}
+
+const arrowStyle: React.CSSProperties = {
+  fontFamily: "'DM Mono', 'Courier New', monospace",
+  fontSize: "10px",
+  color: "#6e6860",
+  lineHeight: 1,
+  background: "none",
+  border: "none",
+  cursor: "pointer",
+  padding: "0 4px",
+}
 
 export default function RackContainer() {
   // ── Audio nodes ────────────────────────────────────────────────────────────
@@ -37,7 +56,6 @@ export default function RackContainer() {
   const seqCvGain = useRef<GainNode | null>(null)
 
   // ── Ping pong delay nodes ──────────────────────────────────────────────────
-  // True stereo ping pong: signal alternates L → R → L via cross-fed delays
   const ppDelayL = useRef<DelayNode | null>(null)
   const ppDelayR = useRef<DelayNode | null>(null)
   const ppFbL = useRef<GainNode | null>(null)
@@ -91,15 +109,40 @@ export default function RackContainer() {
   const [delayFb, setDelayFb] = useState(0.4)
   const [delayMix, setDelayMix] = useState(0.35)
   const [pingPong, setPingPong] = useState(false)
-  const [ppDivision, setPpDivision] = useState(4) // 1/4 note default
+  const [ppDivision, setPpDivision] = useState(4)
   const [masterVol, setMasterVol] = useState(0.6)
 
-  // ── ADSR value refs ─────────────────────
+  // ── ADSR value refs ────────────────────────────────────────────────────────
   const attackRef = useRef(attack)
   const decayRef = useRef(decay)
   const sustainRef = useRef(sustain)
   const releaseRef = useRef(release)
   const vcaLevelRef = useRef(vcaLevel)
+
+  // ── Button interaction state ───────────────────────────────────────────────
+  const [btnHover, setBtnHover] = useState<"clear" | "patch" | null>(null)
+  const [btnPress, setBtnPress] = useState<"clear" | "patch" | null>(null)
+
+  // ── Mobile / orientation detection ────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(false)
+  const [isPortrait, setIsPortrait] = useState(false)
+  const [mobilePatchReady, setMobilePatchReady] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      setIsMobile(window.innerWidth < 1024)
+      setIsPortrait(window.innerHeight > window.innerWidth)
+    }
+    check()
+    window.addEventListener("resize", check)
+    window.addEventListener("orientationchange", () => setTimeout(check, 100))
+    return () => {
+      window.removeEventListener("resize", check)
+      window.removeEventListener("orientationchange", () =>
+        setTimeout(check, 100)
+      )
+    }
+  }, [])
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const cableMap = cables.reduce<Partial<Record<PortId, PortId>>>((acc, c) => {
@@ -192,57 +235,39 @@ export default function RackContainer() {
     dly.connect(dwet)
 
     const initPpTime = 60 / bpm / ppDivision
-
-    // ── Ping pong delay ──────────────────────────────────────────────────────
-    // Architecture: src → ppDelayL (L ch) ─→ ppFbL ─→ ppDelayR (R ch) ─→ ppFbR ─┐
-    //                                  ↓                              ↓            │
-    //                             merger ch0                     merger ch1        │
-    //                                  └──────── ppWet ──────────────┘            │
-    //              ppFbR feeds back into ppDelayL ◄────────────────────────────────┘
     const pDlyL = ac.createDelay(4)
-    pDlyL.delayTime.value = initPpTime // start with L delay time based on BPM/division, will sync to this time when BPM/division changes
+    pDlyL.delayTime.value = initPpTime
     ppDelayL.current = pDlyL
-
     const pDlyR = ac.createDelay(4)
-    pDlyR.delayTime.value = initPpTime * 2 // start with R delay at double L delay for a wider stereo image, will sync to L delay time when BPM/division changes
+    pDlyR.delayTime.value = initPpTime * 2
     ppDelayR.current = pDlyR
-
-    // Cross feedback: L output → R input, R output → L input (the ping pong)
     const pFbL = ac.createGain()
     pFbL.gain.value = delayFb
     ppFbL.current = pFbL
-
     const pFbR = ac.createGain()
     pFbR.gain.value = delayFb
     ppFbR.current = pFbR
-
     pDlyL.connect(pFbL)
-    pFbL.connect(pDlyR) // L echo feeds into R delay
+    pFbL.connect(pDlyR)
     pDlyR.connect(pFbR)
-    pFbR.connect(pDlyL) // R echo feeds back into L delay
-
+    pFbR.connect(pDlyL)
     const merger = ac.createChannelMerger(2)
     ppMerger.current = merger
-    pDlyL.connect(merger, 0, 0) // left channel output
-    pDlyR.connect(merger, 0, 1) // right channel output
-
-    // hard pan l and r channels for maximum stereo image
+    pDlyL.connect(merger, 0, 0)
+    pDlyR.connect(merger, 0, 1)
     const panL = ac.createStereoPanner()
-    panL.pan.value = -1 // hard pan left
+    panL.pan.value = -1
     const panR = ac.createStereoPanner()
-    panR.pan.value = 1 // hard pan right
-
+    panR.pan.value = 1
     const splitter = ac.createChannelSplitter(2)
     merger.connect(splitter)
-    splitter.connect(panL, 0) // left channel to panL
-    splitter.connect(panR, 1) // right channel to panR
-
+    splitter.connect(panL, 0)
+    splitter.connect(panR, 1)
     const pWet = ac.createGain()
-    pWet.gain.value = delayMix * 2 // boost wet signal to compensate for split into 2 channels
+    pWet.gain.value = delayMix * 2
     ppWet.current = pWet
     panL.connect(pWet)
     panR.connect(pWet)
-
     const pDry = ac.createGain()
     pDry.gain.value = 1.0
     ppDry.current = pDry
@@ -291,12 +316,9 @@ export default function RackContainer() {
         } catch {}
       })
 
-      // Restore internal reverb connection lost on disconnect
-      if (reverbConv.current && reverbWet.current) {
+      if (reverbConv.current && reverbWet.current)
         reverbConv.current.connect(reverbWet.current)
-      }
 
-      // Restore ping pong cross-feedback internal graph
       const pDlyL = ppDelayL.current
       const pDlyR = ppDelayR.current
       const pFbL = ppFbL.current
@@ -332,7 +354,6 @@ export default function RackContainer() {
 
       if (lk("lfo-out", "filter-cv-in")) lg.connect(filt.frequency)
       if (lk("lfo-out", "osc-fm-in")) lg.connect(osc.frequency)
-
       lg.gain.setTargetAtTime(
         lk("lfo-out", "osc-fm-in") || lk("lfo-out", "filter-cv-in")
           ? lfoDepth
@@ -474,9 +495,8 @@ export default function RackContainer() {
       }
       return
     }
-    if (lk("vca-out", "out-in") || lk("filter-audio-out", "out-in")) {
+    if (lk("vca-out", "out-in") || lk("filter-audio-out", "out-in"))
       src.connect(master)
-    }
   }
 
   // ── ADSR trigger ───────────────────────────────────────────────────────────
@@ -484,7 +504,7 @@ export default function RackContainer() {
     const ac = ctx.current
     const vca = vcaGain.current
     if (!ac || !vca) return
-    if (!linked("adsr-env-out", "vca-cv-in")) return // not connected
+    if (!linked("adsr-env-out", "vca-cv-in")) return
     const attack = attackRef.current
     const decay = decayRef.current
     const sustain = sustainRef.current
@@ -500,7 +520,7 @@ export default function RackContainer() {
     vca.gain.linearRampToValueAtTime(0, now + attack + decay + 0.05 + release)
   }, [attack, decay, sustain, release, vcaLevel, cables])
 
-  // ── Sequencer  ─────────────────────────────────────────────────────────
+  // ── Sequencer ──────────────────────────────────────────────────────────────
   const stepSeq = useCallback(() => {
     setSeqStep((prev) => {
       const next = (prev + 1) % 5
@@ -527,6 +547,7 @@ export default function RackContainer() {
     setClockBeat(true)
     setTimeout(() => setClockBeat(false), 80)
   }, [scaleIdx, rootIdx, cables]) // eslint-disable-line
+
   useEffect(() => {
     seqNotesRef.current = seqNotes
   }, [seqNotes])
@@ -599,17 +620,12 @@ export default function RackContainer() {
     reverbConv.current.buffer = buildImpulse(ctx.current, reverbSize)
   }, [reverbSize, buildImpulse])
   useEffect(() => {
-    if (!reverbWet.current || !reverbDry.current || !ctx.current) return
+    if (!reverbWet.current || !ctx.current) return
     reverbWet.current.gain.setTargetAtTime(
       reverbMix,
       ctx.current.currentTime,
       0.05
     )
-    //reverbDry.current.gain.setTargetAtTime(
-    //  1 - reverbMix,
-    //  ctx.current.currentTime,
-    //  0.05
-    //  )
   }, [reverbMix])
   useEffect(() => {
     if (delayNode.current && ctx.current)
@@ -641,15 +657,7 @@ export default function RackContainer() {
         ctx.current.currentTime,
         0.05
       )
-    //if (ppDry.current)
-    //ppDry.current.gain.setTargetAtTime(
-    // 1 - delayMix,
-    //  ctx.current.currentTime,
-    // 0.05
-    //)
   }, [delayMix])
-
-  // Sync ping pong delay time when BPM or division changes
   useEffect(() => {
     const t = 60 / bpm / ppDivision
     if (!ctx.current) return
@@ -661,51 +669,30 @@ export default function RackContainer() {
       )
     if (ppDelayR.current)
       ppDelayR.current.delayTime.setTargetAtTime(
-        t * 2, // keep R delay at double L delay for a wider stereo image, will sync to L delay time when BPM/division changes
+        t * 2,
         ctx.current.currentTime,
         0.01
       )
   }, [bpm, ppDivision])
-
-  // Re-sync graph when ping pong mode toggles
   useEffect(() => {
     if (ctx.current) syncGraph(cables)
   }, [pingPong]) // eslint-disable-line
-
-  // ── OSC freq: only update when seq-cv-out is NOT patched to osc-voct-in ───
   useEffect(() => {
-    if (
-      oscNode.current &&
-      ctx.current &&
-      !linked("seq-cv-out", "osc-voct-in")
-    ) {
+    if (oscNode.current && ctx.current && !linked("seq-cv-out", "osc-voct-in"))
       oscNode.current.frequency.setTargetAtTime(
         oscFreq,
         ctx.current.currentTime,
         0.05
       )
-    }
   }, [oscFreq, cables]) // eslint-disable-line
-
-  // ── VCA level: only update when ADSR is NOT controlling the VCA ───────────
   useEffect(() => {
-    if (
-      vcaGain.current &&
-      ctx.current &&
-      !linked("adsr-env-out", "vca-cv-in")
-    ) {
+    if (vcaGain.current && ctx.current && !linked("adsr-env-out", "vca-cv-in"))
       vcaGain.current.gain.setTargetAtTime(
         vcaLevel,
         ctx.current.currentTime,
         0.05
       )
-    }
   }, [vcaLevel, cables]) // eslint-disable-line
-
-  useEffect(() => {
-    if (oscNode.current) oscNode.current.type = WAVEFORMS[oscWaveIdx]
-  }, [oscWaveIdx])
-
   useEffect(() => {
     attackRef.current = attack
   }, [attack])
@@ -759,6 +746,37 @@ export default function RackContainer() {
     window.addEventListener("mousemove", onMove)
     return () => window.removeEventListener("mousemove", onMove)
   }, [])
+
+  // ── Auto patch cables ──────────────────────────────────────────────────────
+  const AUTO_PATCH_CABLES: Cable[] = [
+    { from: "clock-out", to: "seq-clock-in", color: CABLE_COLORS[0] },
+    { from: "clock-out", to: "delay-clock-in", color: CABLE_COLORS[0] },
+    { from: "seq-cv-out", to: "osc-voct-in", color: CABLE_COLORS[1] },
+    { from: "osc-out", to: "filter-audio-in", color: CABLE_COLORS[2] },
+    { from: "lfo-out", to: "filter-cv-in", color: CABLE_COLORS[3] },
+    { from: "lfo-out", to: "osc-fm-in", color: CABLE_COLORS[3] },
+    { from: "filter-audio-out", to: "vca-audio-in", color: CABLE_COLORS[4] },
+    { from: "adsr-env-out", to: "vca-cv-in", color: CABLE_COLORS[5] },
+    { from: "seq-gate-out", to: "adsr-gate-in", color: CABLE_COLORS[6] },
+    { from: "vca-out", to: "reverb-audio-in", color: CABLE_COLORS[7] },
+    { from: "reverb-audio-out", to: "delay-audio-in", color: CABLE_COLORS[8] },
+    { from: "delay-audio-out", to: "out-in", color: CABLE_COLORS[9] },
+  ]
+
+  const doAutoPatch = useCallback(() => {
+    initAudio()
+    setCables(AUTO_PATCH_CABLES)
+    setColorIdx(0)
+    syncGraph(AUTO_PATCH_CABLES)
+  }, [initAudio, syncGraph]) // eslint-disable-line
+
+  // ── Mobile: auto-patch on landscape entry ─────────────────────────────────
+  useEffect(() => {
+    if (isMobile && !isPortrait && !mobilePatchReady) {
+      doAutoPatch()
+      setMobilePatchReady(true)
+    }
+  }, [isMobile, isPortrait, mobilePatchReady, doAutoPatch])
 
   // ── Port click ─────────────────────────────────────────────────────────────
   const handlePortClick = useCallback(
@@ -856,552 +874,856 @@ export default function RackContainer() {
     )
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div
-      className="flex flex-col items-center gap-3 p-4 select-none overflow-x-auto"
-      style={{ cursor: dragging ? "none" : "default", minWidth: "max-content" }}
-    >
-      {/* Rack */}
+  // ── MOBILE: Portrait — rotate prompt ──────────────────────────────────────
+  if (isMobile && isPortrait) {
+    return (
       <div
-        ref={rackRef}
-        className="relative z-0 flex gap-2 rounded-xl p-3 mx-auto"
-        style={{ background: "#0d0d0d", border: "2px solid #111" }}
-        onClick={(e) => {
-          if (!(e.target as HTMLElement).closest("[data-port]") && dragging)
-            setDragging(null)
+        style={{
+          width: "100vw",
+          height: "100dvh",
+          background: "#000",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "2rem",
+          userSelect: "none",
         }}
       >
-        {/* SVG cable layer */}
-        <svg
-          className="absolute inset-0 pointer-events-none overflow-visible z-20"
-          style={{ width: "100%", height: "100%" }}
+        <div
+          style={{
+            width: 40,
+            height: 1,
+            background: "#3a2800",
+            marginBottom: "2rem",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: "'Bebas Neue', 'Impact', sans-serif",
+            fontSize: "clamp(32px, 18vw, 72px)",
+            fontWeight: 700,
+            color: "#e8e2d4",
+            letterSpacing: "0.15em",
+            lineHeight: 1,
+            textAlign: "center",
+          }}
         >
-          {cables.map((cable, i) => {
-            const p1 = getCenter(cable.from),
-              p2 = getCenter(cable.to)
-            if (!p1 || !p2) return null
-            return (
-              <g key={i}>
-                <path
-                  d={cablePath(p1, p2)}
-                  stroke={cable.color}
-                  strokeWidth="3"
-                  fill="none"
-                  strokeLinecap="round"
-                  opacity="0.9"
-                />
-                <circle
-                  cx={p1.x}
-                  cy={p1.y}
-                  r="4.5"
-                  fill={cable.color}
-                  stroke="#fff"
-                  strokeWidth="1"
-                />
-                <circle
-                  cx={p2.x}
-                  cy={p2.y}
-                  r="4.5"
-                  fill={cable.color}
-                  stroke="#fff"
-                  strokeWidth="1"
-                />
-              </g>
-            )
-          })}
-          {dragging &&
-            (() => {
-              const p1 = getCenter(dragging.portId)
-              if (!p1) return null
+          PLAYGROUND
+        </span>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 200,
+            height: 1,
+            background: "#1e1e1e",
+            margin: "1.5rem 0",
+          }}
+        />
+        <span style={{ fontSize: "2rem", marginBottom: "1rem", opacity: 0.5 }}>
+          ⟳
+        </span>
+        <span
+          style={{
+            fontFamily: "'DM Mono', 'Courier New', monospace",
+            fontSize: "11px",
+            color: "#6e6860",
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            textAlign: "center",
+            lineHeight: 2.2,
+          }}
+        >
+          rotate to landscape
+          <br />
+          to load the synth
+        </span>
+        <div
+          style={{
+            width: 40,
+            height: 1,
+            background: "#3a2800",
+            marginTop: "2rem",
+          }}
+        />
+        <a
+          href="https://ritasilva.online"
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "9px",
+            color: "#3a3028",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            textDecoration: "none",
+            marginTop: "3rem",
+          }}
+        >
+          ritasilva.online
+        </a>
+      </div>
+    )
+  }
+
+  // ── MOBILE: Landscape — preset-only performance view ──────────────────────
+  if (isMobile && !isPortrait) {
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100dvh",
+          background: "#000",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "1.5rem",
+          userSelect: "none",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Bebas Neue', 'Impact', sans-serif",
+            fontSize: "28px",
+            fontWeight: 700,
+            color: "#e8e2d4",
+            letterSpacing: "0.2em",
+            marginBottom: "4px",
+          }}
+        >
+          PLAYGROUND
+        </span>
+        <span
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "8px",
+            color: "#3a3028",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            marginBottom: "1.5rem",
+          }}
+        >
+          preset — auto patch
+        </span>
+        <span
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "9px",
+            color: "#4a4030",
+            letterSpacing: "0.1em",
+            textAlign: "center",
+            marginBottom: "2rem",
+            lineHeight: 2,
+          }}
+        >
+          CLK → SEQ → OSC → FILTER → VCA → REVERB → DELAY → OUT
+        </span>
+        <span
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "9px",
+            color: "#6e6860",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            marginBottom: "12px",
+          }}
+        >
+          output volume
+        </span>
+        <Knob
+          value={masterVol}
+          min={0}
+          max={1}
+          label="vol"
+          sublabel={`${Math.round(masterVol * 100)}%`}
+          size={56}
+          onChange={(v) => {
+            setMasterVol(v)
+            if (masterGain.current && ctx.current)
+              masterGain.current.gain.setTargetAtTime(
+                v,
+                ctx.current.currentTime,
+                0.05
+              )
+          }}
+        />
+        <div
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: mobilePatchReady ? "#f5a623" : "#1a0e00",
+            boxShadow: mobilePatchReady ? "0 0 8px #f5a623" : "none",
+            marginTop: "16px",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "7px",
+            color: mobilePatchReady ? "#6a5030" : "#2a2020",
+            letterSpacing: "0.15em",
+            textTransform: "uppercase",
+            marginTop: "6px",
+          }}
+        >
+          {mobilePatchReady ? "playing" : "loading..."}
+        </span>
+        <a
+          href="https://ritasilva.online"
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "8px",
+            color: "#2a2820",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            textDecoration: "none",
+            marginTop: "auto",
+            paddingTop: "2rem",
+          }}
+        >
+          ritasilva.online
+        </a>
+      </div>
+    )
+  }
+
+  // ── DESKTOP / TABLET: Full rack ────────────────────────────────────────────
+  return (
+    <div
+      className="flex flex-col items-center gap-3 p-4 select-none w-full overflow-hidden"
+      style={{ cursor: dragging ? "none" : "default" }}
+    >
+      <div
+        className="relative flex gap-2 rounded-xl p-3"
+        style={{ marginBottom: "0px" }}
+      >
+        <div
+          ref={rackRef}
+          className="relative flex gap-2 rounded-xl"
+          style={{
+            background: "#0d0d0d",
+            border: "2px solid #1a1a1a",
+            width: "fit-content",
+            //marginBottom: "120px",
+          }}
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest("[data-port]") && dragging)
+              setDragging(null)
+          }}
+        >
+          {/* SVG cable layer */}
+          <svg
+            className="absolute pointer-events-none"
+            style={{
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "calc(100% + 120px)",
+              overflow: "visible",
+              zIndex: 20,
+            }}
+          >
+            {cables.map((cable, i) => {
+              const p1 = getCenter(cable.from),
+                p2 = getCenter(cable.to)
+              if (!p1 || !p2) return null
               return (
-                <g>
+                <g key={i}>
                   <path
-                    d={cablePath(p1, mousePos)}
-                    stroke={dragging.color}
+                    d={cablePath(p1, p2)}
+                    stroke={cable.color}
                     strokeWidth="3"
                     fill="none"
                     strokeLinecap="round"
-                    opacity="0.55"
-                    strokeDasharray="6 4"
+                    opacity="0.9"
                   />
                   <circle
-                    cx={mousePos.x}
-                    cy={mousePos.y}
-                    r="6"
-                    fill={dragging.color}
+                    cx={p1.x}
+                    cy={p1.y}
+                    r="4.5"
+                    fill={cable.color}
                     stroke="#fff"
-                    strokeWidth="1.5"
+                    strokeWidth="1"
                   />
-                  <line
-                    x1={mousePos.x}
-                    y1={mousePos.y + 6}
-                    x2={mousePos.x}
-                    y2={mousePos.y + 14}
-                    stroke={dragging.color}
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
+                  <circle
+                    cx={p2.x}
+                    cy={p2.y}
+                    r="4.5"
+                    fill={cable.color}
+                    stroke="#fff"
+                    strokeWidth="1"
                   />
                 </g>
               )
-            })()}
-        </svg>
-
-        {/* ── CLOCK ─────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="clock" width={110}>
-          <div className="flex flex-col items-center gap-1">
-            <DigitalDisplay value={`${Math.round(bpm)} bpm`} width={88} />
-            <div
-              className="w-2 h-2 rounded-full mt-1 transition-all duration-75"
-              style={{
-                background: clockBeat ? "#f5a623" : "#1a0e00",
-                boxShadow: clockBeat ? "0 0 5px #f5a623" : "none",
-              }}
-            />
-          </div>
-          <Knob
-            value={bpm}
-            min={30}
-            max={300}
-            label="bpm"
-            sublabel={`${Math.round(bpm)}`}
-            onChange={setBpm}
-          />
-          <PortSection>
-            {mkPort({ id: "clock-out", label: "out", type: "output" })}
-          </PortSection>
-        </ModuleFrontPanel>
-
-        {/* ── SEQUENCER ─────────────────────────────────────────── */}
-        <ModuleFrontPanel title="seq — 5 step" width={200}>
-          <div className="flex gap-1 w-full">
-            <div className="flex flex-col gap-0.5 flex-1">
-              <span className="text-[7px] font-mono #6e6860 uppercase tracking-wider">
-                scale
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() =>
-                    setScaleIdx(
-                      (i) => (i - 1 + SCALE_NAMES.length) % SCALE_NAMES.length
-                    )
-                  }
-                  className="#6e6860 font-mono text-[10px] px-1"
-                  style={{ lineHeight: 1 }}
-                >
-                  ◀
-                </button>
-                <DigitalDisplay value={SCALE_NAMES[scaleIdx]} width={72} />
-                <button
-                  onClick={() =>
-                    setScaleIdx((i) => (i + 1) % SCALE_NAMES.length)
-                  }
-                  className="#6e6860 font-mono text-[10px] px-1"
-                  style={{ lineHeight: 1 }}
-                >
-                  ▶
-                </button>
-              </div>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7px] font-mono #6e6860 uppercase tracking-wider">
-                root
-              </span>
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => setRootIdx((i) => (i - 1 + 12) % 12)}
-                  className="#6e6860 font-mono text-[10px] px-0.5"
-                  style={{ lineHeight: 1 }}
-                >
-                  ◀
-                </button>
-                <DigitalDisplay value={ROOT_NOTES[rootIdx]} width={30} />
-                <button
-                  onClick={() => setRootIdx((i) => (i + 1) % 12)}
-                  className="#6e6860 font-mono text-[10px] px-0.5"
-                  style={{ lineHeight: 1 }}
-                >
-                  ▶
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-1.5 w-full justify-center">
-            {seqNotes.map((note, i) => {
-              const quantized = quantizeToScale(
-                note,
-                SCALE_NAMES[scaleIdx],
-                rootIdx
-              )
-              return (
-                <div key={i} className="flex flex-col items-center gap-1">
-                  <div
-                    className="w-2 h-2 rounded-full transition-all duration-75"
-                    style={{
-                      background: seqStep === i ? "#f5a623" : "#050505",
-                      boxShadow: seqStep === i ? "0 0 5px #f5a623" : "none",
-                      border: "1px solid #333",
-                    }}
-                  />
-                  <Knob
-                    value={note}
-                    min={36}
-                    max={84}
-                    label={`s${i + 1}`}
-                    sublabel={midiName(quantized)}
-                    size={28}
-                    onChange={(v) =>
-                      setSeqNotes((prev) => {
-                        const n = [...prev]
-                        n[i] = Math.round(v)
-                        return n
-                      })
-                    }
-                  />
-                </div>
-              )
             })}
-          </div>
-          <PortSection>
-            {mkPort({ id: "seq-clock-in", label: "clk in", type: "input" })}
-            {mkPort({ id: "seq-cv-out", label: "cv out", type: "output" })}
-            {mkPort({ id: "seq-gate-out", label: "gate out", type: "output" })}
-          </PortSection>
-        </ModuleFrontPanel>
+            {dragging &&
+              (() => {
+                const p1 = getCenter(dragging.portId)
+                if (!p1) return null
+                return (
+                  <g>
+                    <path
+                      d={cablePath(p1, mousePos)}
+                      stroke={dragging.color}
+                      strokeWidth="3"
+                      fill="none"
+                      strokeLinecap="round"
+                      opacity="0.55"
+                      strokeDasharray="6 4"
+                    />
+                    <circle
+                      cx={mousePos.x}
+                      cy={mousePos.y}
+                      r="6"
+                      fill={dragging.color}
+                      stroke="#fff"
+                      strokeWidth="1.5"
+                    />
+                    <line
+                      x1={mousePos.x}
+                      y1={mousePos.y + 6}
+                      x2={mousePos.x}
+                      y2={mousePos.y + 14}
+                      stroke={dragging.color}
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                )
+              })()}
+          </svg>
 
-        {/* ── ADSR ──────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="adsr" width={110}>
-          <Knob
-            value={attack}
-            min={0.001}
-            max={2}
-            label="attack"
-            sublabel={`${attack.toFixed(2)}s`}
-            onChange={setAttack}
-          />
-          <Knob
-            value={decay}
-            min={0.01}
-            max={2}
-            label="decay"
-            sublabel={`${decay.toFixed(2)}s`}
-            onChange={setDecay}
-          />
-          <Knob
-            value={sustain}
-            min={0}
-            max={1}
-            label="sustain"
-            sublabel={`${Math.round(sustain * 100)}%`}
-            onChange={setSustain}
-          />
-          <Knob
-            value={release}
-            min={0.01}
-            max={4}
-            label="release"
-            sublabel={`${release.toFixed(2)}s`}
-            onChange={setRelease}
-          />
-          <PortSection>
-            {mkPort({ id: "adsr-gate-in", label: "gate in", type: "input" })}
-            {mkPort({ id: "adsr-env-out", label: "env out", type: "output" })}
-          </PortSection>
-        </ModuleFrontPanel>
+          {/* ── CLOCK ────────────────────────────────────────────── */}
+          <ModuleFrontPanel title="clock" width={110}>
+            <div className="flex flex-col items-center gap-1">
+              <DigitalDisplay value={`${Math.round(bpm)} bpm`} width={88} />
+              <div
+                className="w-2 h-2 rounded-full mt-1 transition-all duration-75"
+                style={{
+                  background: clockBeat ? "#f5a623" : "#1a0e00",
+                  boxShadow: clockBeat ? "0 0 6px #f5a623" : "none",
+                }}
+              />
+            </div>
+            <Knob
+              value={bpm}
+              min={30}
+              max={300}
+              label="bpm"
+              sublabel={`${Math.round(bpm)}`}
+              onChange={setBpm}
+            />
+            <PortSection>
+              {mkPort({ id: "clock-out", label: "clock out", type: "output" })}
+            </PortSection>
+          </ModuleFrontPanel>
 
-        {/* ── LFO ───────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="lfo" width={95}>
-          <Knob
-            value={lfoRate}
-            min={0.01}
-            max={20}
-            label="rate"
-            sublabel={`${lfoRate.toFixed(1)} Hz`}
-            onChange={setLfoRate}
-          />
-          <Knob
-            value={lfoDepth}
-            min={0}
-            max={800}
-            label="depth"
-            sublabel={`${Math.round(lfoDepth)}`}
-            onChange={setLfoDepth}
-          />
-          <PortSection>
-            {mkPort({ id: "lfo-out", label: "out", type: "output" })}
-          </PortSection>
-        </ModuleFrontPanel>
-
-        {/* ── OSC ───────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="osc" width={110}>
-          <Knob
-            value={oscFreq}
-            min={20}
-            max={2000}
-            label="freq"
-            sublabel={`${Math.round(oscFreq)} Hz`}
-            onChange={setOscFreq}
-          />
-          <Knob
-            value={oscWaveIdx}
-            min={0}
-            max={3}
-            label="wave"
-            sublabel={WAVEFORMS[Math.round(oscWaveIdx)]}
-            onChange={(v) => setOscWaveIdx(Math.round(v))}
-          />
-          <PortSection>
-            {mkPort({ id: "osc-voct-in", label: "v/oct in", type: "input" })}
-            {mkPort({ id: "osc-fm-in", label: "fm in", type: "input" })}
-            {mkPort({ id: "osc-out", label: "out", type: "output" })}
-          </PortSection>
-        </ModuleFrontPanel>
-
-        {/* ── FILTER ────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="filter" width={120}>
-          <div className="flex gap-1">
-            {(["lowpass", "bandpass", "highpass"] as BiquadFilterType[]).map(
-              (t) => (
-                <button
-                  key={t}
-                  onClick={() => setFilterType(t)}
-                  className="text-[7px] font-mono uppercase px-1.5 py-0.5 rounded transition-all"
+          {/* ── SEQUENCER ────────────────────────────────────────── */}
+          <ModuleFrontPanel title="5 STEP SEQUENCER" width={270}>
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                width: "100%",
+                padding: "0 16px",
+                boxSizing: "border-box",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+              >
+                <span
+                  style={{ ...labelStyle, textAlign: "center", width: "100%" }}
+                >
+                  scale
+                </span>
+                <div
                   style={{
-                    background: filterType === t ? "#2a1f00" : "#080808",
-                    color: filterType === t ? "#f5a623" : "#444",
-                    border:
-                      filterType === t ? "1px solid #2a6a2a" : "1px solid #222",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                    width: "100%",
                   }}
                 >
-                  {t === "lowpass" ? "LP" : t === "bandpass" ? "BP" : "HP"}
-                </button>
-              )
-            )}
-          </div>
-          <Knob
-            value={filterCutoff}
-            min={20}
-            max={18000}
-            label="cutoff"
-            sublabel={`${Math.round(filterCutoff)} Hz`}
-            onChange={setFilterCutoff}
-          />
-          <Knob
-            value={filterRes}
-            min={0.1}
-            max={20}
-            label="res"
-            sublabel={filterRes.toFixed(1)}
-            onChange={setFilterRes}
-          />
-          <PortSection>
-            {mkPort({
-              id: "filter-audio-in",
-              label: "audio in",
-              type: "input",
-            })}
-            {mkPort({ id: "filter-cv-in", label: "cv in", type: "input" })}
-            {mkPort({
-              id: "filter-audio-out",
-              label: "audio out",
-              type: "output",
-            })}
-          </PortSection>
-        </ModuleFrontPanel>
-
-        {/* ── VCA ───────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="vca" width={110}>
-          <Knob
-            value={vcaLevel}
-            min={0}
-            max={1}
-            label="level"
-            sublabel={`${Math.round(vcaLevel * 100)}%`}
-            onChange={setVcaLevel}
-          />
-          <canvas
-            ref={waveRef}
-            width={100}
-            height={28}
-            className="rounded"
-            style={{ background: "#060606", border: "1px solid #1e1a14" }}
-          />
-          <PortSection>
-            {mkPort({ id: "vca-cv-in", label: "cv in", type: "input" })}
-            {mkPort({ id: "vca-audio-in", label: "audio in", type: "input" })}
-            {mkPort({ id: "vca-out", label: "out", type: "output" })}
-          </PortSection>
-        </ModuleFrontPanel>
-
-        {/* ── REVERB ────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="reverb" width={100}>
-          <Knob
-            value={reverbSize}
-            min={0.01}
-            max={1}
-            label="size"
-            sublabel={`${Math.round(reverbSize * 100)}%`}
-            onChange={setReverbSize}
-          />
-          <Knob
-            value={reverbMix}
-            min={0}
-            max={1}
-            label="mix"
-            sublabel={`${Math.round(reverbMix * 100)}%`}
-            onChange={setReverbMix}
-          />
-          <PortSection>
-            {mkPort({
-              id: "reverb-audio-in",
-              label: "audio in",
-              type: "input",
-            })}
-            {mkPort({
-              id: "reverb-audio-out",
-              label: "audio out",
-              type: "output",
-            })}
-          </PortSection>
-        </ModuleFrontPanel>
-
-        {/* ── DELAY ─────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="delay" width={135}>
-          {/* Mode toggle */}
-          <div className="flex gap-1 w-full">
-            <button
-              onClick={() => setPingPong(false)}
-              className="text-[7px] font-mono uppercase px-2 py-0.5 rounded transition-all flex-1"
-              style={{
-                background: !pingPong ? "#1c1000" : "#080808",
-                color: !pingPong ? "#f5a623" : "#444",
-                border: !pingPong ? "1px solid #2a2a6a" : "1px solid #222",
-              }}
-            >
-              basic
-            </button>
-            <button
-              onClick={() => setPingPong(true)}
-              className="text-[7px] font-mono uppercase px-2 py-0.5 rounded transition-all flex-1"
-              style={{
-                background: pingPong ? "#1c1000" : "#080808",
-                color: pingPong ? "#f5a623" : "#444",
-                border: pingPong ? "1px solid #2a2a6a" : "1px solid #222",
-              }}
-            >
-              ping pong
-            </button>
-          </div>
-
-          {/* Ping pong division selector */}
-          {pingPong && (
-            <div className="flex flex-col gap-0.5 w-full">
-              <span className="text-[7px] font-mono #6e6860 uppercase tracking-wider">
-                division
-              </span>
-              <div className="flex flex-wrap gap-0.5">
-                {([1, 2, 3, 4, 6, 8, 16] as const).map((d) => (
                   <button
-                    key={d}
-                    onClick={() => setPpDivision(d)}
-                    className="text-[7px] font-mono px-1.5 py-0.5 rounded transition-all"
-                    style={{
-                      background: ppDivision === d ? "#1c1000" : "#080808",
-                      color: ppDivision === d ? "#f5a623" : "#444",
-                      border:
-                        ppDivision === d
-                          ? "1px solid #2a2a6a"
-                          : "1px solid #222",
-                    }}
+                    onClick={() =>
+                      setScaleIdx(
+                        (i) => (i - 1 + SCALE_NAMES.length) % SCALE_NAMES.length
+                      )
+                    }
+                    style={arrowStyle}
                   >
-                    1/{d}
+                    ◀
                   </button>
-                ))}
+                  <DigitalDisplay value={SCALE_NAMES[scaleIdx]} width={72} />
+                  <button
+                    onClick={() =>
+                      setScaleIdx((i) => (i + 1) % SCALE_NAMES.length)
+                    }
+                    style={arrowStyle}
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
-              <span
-                className="text-[8px] font-mono"
-                style={{ color: "#3a3a5a" }}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
               >
-                {(ppDelayTime * 1000).toFixed(0)}ms @ {Math.round(bpm)} bpm
-              </span>
+                <span
+                  style={{ ...labelStyle, textAlign: "center", width: "100%" }}
+                >
+                  root
+                </span>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <button
+                    onClick={() => setRootIdx((i) => (i - 1 + 12) % 12)}
+                    style={arrowStyle}
+                  >
+                    ◀
+                  </button>
+                  <DigitalDisplay value={ROOT_NOTES[rootIdx]} width={30} />
+                  <button
+                    onClick={() => setRootIdx((i) => (i + 1) % 12)}
+                    style={arrowStyle}
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
+            <div className="flex gap-2 justify-center">
+              {seqNotes.map((note, i) => {
+                const quantized = quantizeToScale(
+                  note,
+                  SCALE_NAMES[scaleIdx],
+                  rootIdx
+                )
+                return (
+                  <div key={i} className="flex flex-col items-center gap-1">
+                    <div
+                      className="w-2 h-2 rounded-full transition-all duration-75"
+                      style={{
+                        background: seqStep === i ? "#f5a623" : "#0a0806",
+                        boxShadow: seqStep === i ? "0 0 6px #f5a623bb" : "none",
+                        border: "1px solid #1e1e1e",
+                      }}
+                    />
+                    <Knob
+                      value={note}
+                      min={36}
+                      max={84}
+                      label={`s${i + 1}`}
+                      sublabel={midiName(quantized)}
+                      size={28}
+                      onChange={(v) =>
+                        setSeqNotes((prev) => {
+                          const n = [...prev]
+                          n[i] = Math.round(v)
+                          return n
+                        })
+                      }
+                    />
+                  </div>
+                )
+              })}
+            </div>
+            <PortSection>
+              {mkPort({ id: "seq-clock-in", label: "clk in", type: "input" })}
+              {mkPort({ id: "seq-cv-out", label: "cv out", type: "output" })}
+              {mkPort({
+                id: "seq-gate-out",
+                label: "gate out",
+                type: "output",
+              })}
+            </PortSection>
+          </ModuleFrontPanel>
 
-          {/* Basic mode time knob only */}
-          {!pingPong && (
+          {/* ── ADSR ─────────────────────────────────────────────── */}
+          <ModuleFrontPanel title="adsr" width={110}>
             <Knob
-              value={delayTime}
+              value={attack}
+              min={0.001}
+              max={2}
+              label="attack"
+              sublabel={`${attack.toFixed(2)}s`}
+              onChange={setAttack}
+            />
+            <Knob
+              value={decay}
               min={0.01}
               max={2}
-              label="time"
-              sublabel={`${delayTime.toFixed(2)}s`}
-              onChange={setDelayTime}
+              label="decay"
+              sublabel={`${decay.toFixed(2)}s`}
+              onChange={setDecay}
             />
-          )}
+            <Knob
+              value={sustain}
+              min={0}
+              max={1}
+              label="sustain"
+              sublabel={`${Math.round(sustain * 100)}%`}
+              onChange={setSustain}
+            />
+            <Knob
+              value={release}
+              min={0.01}
+              max={4}
+              label="release"
+              sublabel={`${release.toFixed(2)}s`}
+              onChange={setRelease}
+            />
+            <PortSection>
+              {mkPort({ id: "adsr-gate-in", label: "gate in", type: "input" })}
+              {mkPort({ id: "adsr-env-out", label: "env out", type: "output" })}
+            </PortSection>
+          </ModuleFrontPanel>
 
-          <Knob
-            value={delayFb}
-            min={0}
-            max={0.95}
-            label="feedback"
-            sublabel={`${Math.round(delayFb * 100)}%`}
-            onChange={setDelayFb}
-          />
-          <Knob
-            value={delayMix}
-            min={0}
-            max={1}
-            label="mix"
-            sublabel={`${Math.round(delayMix * 100)}%`}
-            onChange={setDelayMix}
-          />
-          <PortSection>
-            {mkPort({ id: "delay-clock-in", label: "clk in", type: "input" })}
-            {mkPort({ id: "delay-audio-in", label: "audio in", type: "input" })}
-            {mkPort({
-              id: "delay-audio-out",
-              label: "audio out",
-              type: "output",
-            })}
-          </PortSection>
-        </ModuleFrontPanel>
+          {/* ── LFO ──────────────────────────────────────────────── */}
+          <ModuleFrontPanel title="lfo" width={95}>
+            <Knob
+              value={lfoRate}
+              min={0.01}
+              max={20}
+              label="rate"
+              sublabel={`${lfoRate.toFixed(1)} Hz`}
+              onChange={setLfoRate}
+            />
+            <Knob
+              value={lfoDepth}
+              min={0}
+              max={800}
+              label="depth"
+              sublabel={`${Math.round(lfoDepth)}`}
+              onChange={setLfoDepth}
+            />
+            <PortSection>
+              {mkPort({ id: "lfo-out", label: "out", type: "output" })}
+            </PortSection>
+          </ModuleFrontPanel>
 
-        {/* ── MIXER ────────────────────────────────────────────── */}
-        <ModuleFrontPanel title="out" width={80}>
-          <div
-            className="w-2.5 h-2.5 rounded-full transition-all duration-150"
-            style={{
-              background: connectedPorts.has("out-in") ? "#f5a623" : "#1a0e00",
-              boxShadow: connectedPorts.has("out-in")
-                ? "0 0 6px #f5a623"
-                : "none",
-              border: "1px solid #2a5a2a",
-            }}
-          />
-          <Knob
-            value={masterVol}
-            min={0}
-            max={1}
-            label="vol"
-            sublabel={`${Math.round(masterVol * 100)}%`}
-            onChange={setMasterVol}
-          />
-          <PortSection>
-            {mkPort({ id: "out-in", label: "in", type: "input" })}
-          </PortSection>
-        </ModuleFrontPanel>
+          {/* ── OSC ──────────────────────────────────────────────── */}
+          <ModuleFrontPanel title="osc" width={110}>
+            <Knob
+              value={oscFreq}
+              min={20}
+              max={2000}
+              label="freq"
+              sublabel={`${Math.round(oscFreq)} Hz`}
+              onChange={setOscFreq}
+            />
+            <Knob
+              value={oscWaveIdx}
+              min={0}
+              max={3}
+              label="wave"
+              sublabel={WAVEFORMS[Math.round(oscWaveIdx)]}
+              onChange={(v) => setOscWaveIdx(Math.round(v))}
+            />
+            <PortSection>
+              {mkPort({ id: "osc-voct-in", label: "v/oct in", type: "input" })}
+              {mkPort({ id: "osc-fm-in", label: "fm in", type: "input" })}
+              {mkPort({ id: "osc-out", label: "out", type: "output" })}
+            </PortSection>
+          </ModuleFrontPanel>
+
+          {/* ── FILTER ───────────────────────────────────────────── */}
+          <ModuleFrontPanel title="filter" width={120}>
+            <div className="flex gap-1">
+              {(["lowpass", "bandpass", "highpass"] as BiquadFilterType[]).map(
+                (t) => (
+                  <button
+                    key={t}
+                    onClick={() => setFilterType(t)}
+                    style={{
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: "7px",
+                      textTransform: "uppercase",
+                      padding: "2px 6px",
+                      borderRadius: "3px",
+                      cursor: "pointer",
+                      background: filterType === t ? "#2a1f00" : "#080808",
+                      color: filterType === t ? "#f5a623" : "#4a4440",
+                      border:
+                        filterType === t
+                          ? "1px solid #5a3800"
+                          : "1px solid #1a1a1a",
+                    }}
+                  >
+                    {t === "lowpass" ? "LP" : t === "bandpass" ? "BP" : "HP"}
+                  </button>
+                )
+              )}
+            </div>
+            <Knob
+              value={filterCutoff}
+              min={20}
+              max={18000}
+              label="cutoff"
+              sublabel={`${Math.round(filterCutoff)} Hz`}
+              onChange={setFilterCutoff}
+            />
+            <Knob
+              value={filterRes}
+              min={0.1}
+              max={20}
+              label="res"
+              sublabel={filterRes.toFixed(1)}
+              onChange={setFilterRes}
+            />
+            <PortSection>
+              {mkPort({
+                id: "filter-audio-in",
+                label: "audio in",
+                type: "input",
+              })}
+              {mkPort({ id: "filter-cv-in", label: "cv in", type: "input" })}
+              {mkPort({
+                id: "filter-audio-out",
+                label: "audio out",
+                type: "output",
+              })}
+            </PortSection>
+          </ModuleFrontPanel>
+
+          {/* ── VCA ──────────────────────────────────────────────── */}
+          <ModuleFrontPanel title="vca" width={110}>
+            <Knob
+              value={vcaLevel}
+              min={0}
+              max={1}
+              label="level"
+              sublabel={`${Math.round(vcaLevel * 100)}%`}
+              onChange={setVcaLevel}
+            />
+            <canvas
+              ref={waveRef}
+              width={90}
+              height={28}
+              className="rounded"
+              style={{ background: "#050505", border: "1px solid #1e1a14" }}
+            />
+            <PortSection>
+              {mkPort({ id: "vca-cv-in", label: "cv in", type: "input" })}
+              {mkPort({ id: "vca-audio-in", label: "audio in", type: "input" })}
+              {mkPort({ id: "vca-out", label: "out", type: "output" })}
+            </PortSection>
+          </ModuleFrontPanel>
+
+          {/* ── REVERB ───────────────────────────────────────────── */}
+          <ModuleFrontPanel title="reverb" width={110}>
+            <Knob
+              value={reverbSize}
+              min={0.01}
+              max={1}
+              label="size"
+              sublabel={`${Math.round(reverbSize * 100)}%`}
+              onChange={setReverbSize}
+            />
+            <Knob
+              value={reverbMix}
+              min={0}
+              max={1}
+              label="mix"
+              sublabel={`${Math.round(reverbMix * 100)}%`}
+              onChange={setReverbMix}
+            />
+            <PortSection>
+              {mkPort({
+                id: "reverb-audio-in",
+                label: "audio in",
+                type: "input",
+              })}
+              {mkPort({
+                id: "reverb-audio-out",
+                label: "audio out",
+                type: "output",
+              })}
+            </PortSection>
+          </ModuleFrontPanel>
+
+          {/* ── DELAY ────────────────────────────────────────────── */}
+          <ModuleFrontPanel title="delay" width={135}>
+            <div className="flex gap-1 w-full px-2">
+              <button
+                onClick={() => setPingPong(false)}
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: "7px",
+                  textTransform: "uppercase",
+                  padding: "2px 8px",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  flex: 1,
+                  background: !pingPong ? "#1c1000" : "#080808",
+                  color: !pingPong ? "#f5a623" : "#4a4440",
+                  border: !pingPong ? "1px solid #5a3800" : "1px solid #1a1a1a",
+                }}
+              >
+                basic
+              </button>
+              <button
+                onClick={() => setPingPong(true)}
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: "7px",
+                  textTransform: "uppercase",
+                  padding: "2px 8px",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  flex: 1,
+                  background: pingPong ? "#1c1000" : "#080808",
+                  color: pingPong ? "#f5a623" : "#4a4440",
+                  border: pingPong ? "1px solid #5a3800" : "1px solid #1a1a1a",
+                }}
+              >
+                ping pong
+              </button>
+            </div>
+            {pingPong && (
+              <div className="flex flex-col gap-1 w-full px-2">
+                <span style={labelStyle}>division</span>
+                <div className="flex flex-wrap gap-0.5">
+                  {([1, 2, 3, 4, 6, 8, 16] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setPpDivision(d)}
+                      style={{
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: "8px",
+                        padding: "2px 5px",
+                        borderRadius: "3px",
+                        cursor: "pointer",
+                        background: ppDivision === d ? "#1c1000" : "#080808",
+                        color: ppDivision === d ? "#f5a623" : "#4a4440",
+                        border:
+                          ppDivision === d
+                            ? "1px solid #5a3800"
+                            : "1px solid #1a1a1a",
+                      }}
+                    >
+                      1/{d}
+                    </button>
+                  ))}
+                </div>
+                <span
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: "8px",
+                    color: "#6a5030",
+                  }}
+                >
+                  {(ppDelayTime * 1000).toFixed(0)}ms @ {Math.round(bpm)} bpm
+                </span>
+              </div>
+            )}
+            {!pingPong && (
+              <Knob
+                value={delayTime}
+                min={0.01}
+                max={2}
+                label="time"
+                sublabel={`${delayTime.toFixed(2)}s`}
+                onChange={setDelayTime}
+              />
+            )}
+            <Knob
+              value={delayFb}
+              min={0}
+              max={0.95}
+              label="feedback"
+              sublabel={`${Math.round(delayFb * 100)}%`}
+              onChange={setDelayFb}
+            />
+            <Knob
+              value={delayMix}
+              min={0}
+              max={1}
+              label="mix"
+              sublabel={`${Math.round(delayMix * 100)}%`}
+              onChange={setDelayMix}
+            />
+            <PortSection>
+              {mkPort({ id: "delay-clock-in", label: "clk in", type: "input" })}
+              {mkPort({
+                id: "delay-audio-in",
+                label: "audio in",
+                type: "input",
+              })}
+              {mkPort({
+                id: "delay-audio-out",
+                label: "audio out",
+                type: "output",
+              })}
+            </PortSection>
+          </ModuleFrontPanel>
+
+          {/* ── OUTPUT ───────────────────────────────────────────── */}
+          <ModuleFrontPanel title="out" width={80}>
+            <div
+              className="w-2.5 h-2.5 rounded-full transition-all duration-150"
+              style={{
+                background: connectedPorts.has("out-in")
+                  ? "#f5a623"
+                  : "#1a0e00",
+                boxShadow: connectedPorts.has("out-in")
+                  ? "0 0 8px #f5a62388"
+                  : "none",
+                border: "1px solid #2a1a00",
+              }}
+            />
+            <Knob
+              value={masterVol}
+              min={0}
+              max={1}
+              label="vol"
+              sublabel={`${Math.round(masterVol * 100)}%`}
+              onChange={setMasterVol}
+            />
+            <PortSection>
+              {mkPort({ id: "out-in", label: "in", type: "input" })}
+            </PortSection>
+          </ModuleFrontPanel>
+        </div>
       </div>
 
       {/* Status + controls */}
-      <div className="flex items-center gap-4 px-1">
+      <div
+        className="flex flex-col items-center w-full"
+        style={{
+          maxWidth: "fit-content",
+          marginTop: "24px",
+        }}
+      >
         <span
-          className="text-[10px] font-mono tracking-wider"
           style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "12px",
+            fontWeight: 800,
+            letterSpacing: "0.05em",
             color: dragging
               ? "#f5a623"
               : cables.length > 0
-              ? "#f5a623"
-              : "#333",
+              ? "#c8b890"
+              : "#2e2e2e",
           }}
         >
           {dragging
@@ -1410,82 +1732,89 @@ export default function RackContainer() {
             ? "patch a cable to start"
             : `${cables.length} cable${cables.length !== 1 ? "s" : ""} patched`}
         </span>
-        <div className="flex gap-2 ml-auto">
+        <div className="flex gap-2" style={{ marginTop: "16px" }}>
           <button
             onClick={() => {
               setCables([])
               syncGraph([])
               setDragging(null)
             }}
-            className="text-[9px] font-mono tracking-widest uppercase px-3 py-1.5 rounded"
+            onMouseEnter={() => setBtnHover("clear")}
+            onMouseLeave={() => {
+              setBtnHover(null)
+              setBtnPress(null)
+            }}
+            onMouseDown={() => setBtnPress("clear")}
+            onMouseUp={() => setBtnPress(null)}
             style={{
-              background: "#111",
-              color: "#555",
-              border: "1px solid #222",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: "9px",
+              fontWeight: 700,
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              padding: "6px 12px",
+              borderRadius: "4px",
+              cursor: "pointer",
+              background:
+                btnPress === "clear"
+                  ? "#f5a623"
+                  : btnHover === "clear"
+                  ? "#2a1f00"
+                  : "#0a0a0a",
+              color:
+                btnPress === "clear"
+                  ? "#000"
+                  : btnHover === "clear"
+                  ? "#c8a060"
+                  : "#4a4440",
+              border:
+                btnPress === "clear"
+                  ? "1px solid #f5a623"
+                  : btnHover === "clear"
+                  ? "1px solid #5a3800"
+                  : "1px solid #1a1a1a",
+              transition: "background 0.1s, color 0.1s, border-color 0.1s",
             }}
           >
             clear all
           </button>
           <button
-            onClick={() => {
-              initAudio()
-              const nc: Cable[] = [
-                {
-                  from: "clock-out",
-                  to: "seq-clock-in",
-                  color: CABLE_COLORS[0],
-                },
-                {
-                  from: "seq-cv-out",
-                  to: "osc-voct-in",
-                  color: CABLE_COLORS[1],
-                },
-                {
-                  from: "osc-out",
-                  to: "filter-audio-in",
-                  color: CABLE_COLORS[2],
-                },
-                { from: "lfo-out", to: "filter-cv-in", color: CABLE_COLORS[3] },
-                {
-                  from: "filter-audio-out",
-                  to: "vca-audio-in",
-                  color: CABLE_COLORS[4],
-                },
-                {
-                  from: "adsr-env-out",
-                  to: "vca-cv-in",
-                  color: CABLE_COLORS[5],
-                },
-                {
-                  from: "seq-gate-out",
-                  to: "adsr-gate-in",
-                  color: CABLE_COLORS[6],
-                },
-                {
-                  from: "vca-out",
-                  to: "reverb-audio-in",
-                  color: CABLE_COLORS[7],
-                },
-                {
-                  from: "reverb-audio-out",
-                  to: "delay-audio-in",
-                  color: CABLE_COLORS[8],
-                },
-                {
-                  from: "delay-audio-out",
-                  to: "out-in",
-                  color: CABLE_COLORS[9],
-                },
-              ]
-              setCables(nc)
-              setColorIdx(0)
-              syncGraph(nc)
+            onClick={doAutoPatch}
+            onMouseEnter={() => setBtnHover("patch")}
+            onMouseLeave={() => {
+              setBtnHover(null)
+              setBtnPress(null)
             }}
-            className="text-[9px] font-mono tracking-widest uppercase px-3 py-1.5 rounded"
+            onMouseDown={() => setBtnPress("patch")}
+            onMouseUp={() => setBtnPress(null)}
             style={{
-              background: "#111",
-              color: "#888",
-              border: "1px solid #333",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: "9px",
+              fontWeight: 700,
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              padding: "6px 12px",
+              borderRadius: "4px",
+              cursor: "pointer",
+              background:
+                btnPress === "patch"
+                  ? "#f5a623"
+                  : btnHover === "patch"
+                  ? "#2a1f00"
+                  : "#0a0a0a",
+              color:
+                btnPress === "patch"
+                  ? "#000"
+                  : btnHover === "patch"
+                  ? "#c8a060"
+                  : "#6e6860",
+              border:
+                btnPress === "patch"
+                  ? "1px solid #f5a623"
+                  : btnHover === "patch"
+                  ? "1px solid #5a3800"
+                  : "1px solid #2a2018",
+              transition: "background 0.1s, color 0.1s, border-color 0.1s",
             }}
           >
             auto patch

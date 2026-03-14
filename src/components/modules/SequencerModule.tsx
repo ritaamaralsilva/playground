@@ -28,7 +28,7 @@ export function SequencerModule({
   mkPort,
 }: SequencerModuleProps) {
   return (
-    <ModuleFrontPanel title="seq — 5 step" width={200} color="#1a1a1e">
+    <ModuleFrontPanel title="seq — 5 step" width={300}>
       {/* Scale & root selectors */}
       <div className="flex gap-1 w-full">
         <div className="flex flex-col gap-0.5 flex-1">

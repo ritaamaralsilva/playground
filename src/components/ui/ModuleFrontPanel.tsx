@@ -3,12 +3,10 @@ import type { ReactNode } from "react"
 export function ModuleFrontPanel({
   title,
   width,
-  color = "#000",
   children,
 }: {
   title: string
   width: number
-  color?: string
   children: ReactNode
 }) {
   return (
@@ -16,7 +14,7 @@ export function ModuleFrontPanel({
       className="flex flex-col flex-shrink-0"
       style={{
         width,
-        background: color,
+        background: "#000",
         border: "1px solid #1c1c1c",
         minHeight: 340,
         position: "relative",
@@ -25,8 +23,10 @@ export function ModuleFrontPanel({
     >
       {/* Title bar */}
       <div
-        className="flex flex-col items-center"
         style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
           padding: "10px 6px 8px",
           borderBottom: "1px solid #1e1e1e",
         }}
@@ -35,7 +35,7 @@ export function ModuleFrontPanel({
           style={{
             fontFamily: "'Bebas Neue', 'Impact', sans-serif",
             fontSize: "22px",
-            fontWeight: 400,
+            fontWeight: 700,
             letterSpacing: "0.12em",
             color: "#e8e2d4",
             lineHeight: 1,
@@ -48,11 +48,15 @@ export function ModuleFrontPanel({
 
       {/* Content — centered vertically */}
       <div
-        className="flex flex-col items-center justify-start w-full flex-1"
         style={{
-          gap: "12px",
-          padding: "16px 10px 0 10px",
+          display: "flex",
+          flexDirection: "column",
           alignItems: "center",
+          width: "100%",
+          flex: 1,
+          gap: "12px",
+          padding: "16px 12px 0 8px",
+          boxSizing: "border-box",
         }}
       >
         {children}
@@ -64,14 +68,15 @@ export function ModuleFrontPanel({
 export function PortSection({ children }: { children: ReactNode }) {
   return (
     <div
-      className="w-full grid"
       style={{
+        width: "100%",
         marginTop: "auto",
         borderTop: "1px solid #1a1a1a",
-        padding: "8px 8px 10px",
+        padding: "8px 10px 10px 10px",
+        display: "flex",
+        flexDirection: "column",
         gap: "6px",
-        gridTemplateColumns: "1fr 1fr",
-        alignItems: "center",
+        boxSizing: "border-box",
       }}
     >
       {children}
