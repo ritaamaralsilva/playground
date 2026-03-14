@@ -17,6 +17,8 @@ Patch modules, turn knobs, connect ports, and hear real-time audio in your brows
 - **Interactive controls:** knobs, buttons, digital displays
 - Patch your own modular synth using cables directly in the browser
 - Real-time **modulation and audio synthesis**
+- UI to simulate real environment of a modular synthesizer (Eurorack)
+- Mobile-friendly responsive layout (landscape mode allows to interact with master volume and see a box like diagram of the patch being generated in the auto patch mode)
 
 ---
 
@@ -40,7 +42,7 @@ cd eurorack-web-modules
 
 npm install
 
-# or
+or
 
 yarn install
 
@@ -48,7 +50,7 @@ yarn install
 
 npm run dev
 
-# or
+or
 
 yarn dev
 
@@ -66,8 +68,6 @@ Open http://localhost:3000 to see the synth in action.
 
 ## To do next:
 
-- Adjust UI to align all modules and their content
-- Create a mobile-friendly responsive layout
 - Load presets
 - Additional modules: Sampler (with audio input from user device's microphone), Granular fx, Looper, Harmonic-Oscillator, Complex-Oscillator, Low Pass Gate, Reverse Reverb, Sample and Hold, Function Generator, Noise Generator.
 

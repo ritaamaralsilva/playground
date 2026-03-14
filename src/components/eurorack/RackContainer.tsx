@@ -1432,6 +1432,7 @@ export default function RackContainer() {
                   flexDirection: "column",
                   alignItems: "center",
                   gap: "5px",
+                  marginTop: "20px",
                 }}
               >
                 <span
@@ -1475,6 +1476,7 @@ export default function RackContainer() {
                   flexDirection: "column",
                   alignItems: "center",
                   gap: "5px",
+                  marginTop: "20px",
                 }}
               >
                 <span
@@ -1518,9 +1520,19 @@ export default function RackContainer() {
                     <div
                       className="w-2 h-2 rounded-full transition-all duration-75"
                       style={{
-                        background: seqStep === i ? "#f5a623" : "#0a0806",
-                        boxShadow: seqStep === i ? "0 0 6px #f5a623bb" : "none",
-                        border: "1px solid #1e1e1e",
+                        width: 6,
+                        height: 6,
+                        marginTop: "24px",
+                        marginBottom: "4px",
+                        background: seqStep === i ? "#f5a623" : "#1a1510",
+                        boxShadow:
+                          seqStep === i
+                            ? "0 0 6px #f5a623, 0 0 2px #f5a623"
+                            : "none",
+                        border:
+                          seqStep === i
+                            ? "1px solid #f5a623"
+                            : "1px solid #2a2520",
                       }}
                     />
                     <Knob
