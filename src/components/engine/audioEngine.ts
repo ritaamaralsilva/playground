@@ -114,7 +114,7 @@ export function initAudioEngine(params: {
   masterGain.connect(analyser)
 
   return {
-    ctx,
+    ctx: ac,
     oscNode,
     lfoNode,
     lfoGain,
