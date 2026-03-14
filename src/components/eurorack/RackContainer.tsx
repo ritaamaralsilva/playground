@@ -512,12 +512,30 @@ export default function RackContainer() {
     adsrTimers.current.forEach(clearTimeout)
     adsrTimers.current = []
     const now = ac.currentTime
-    vca.gain.cancelScheduledValues(now)
-    vca.gain.setValueAtTime(0, now)
-    vca.gain.linearRampToValueAtTime(vcaLevel, now + attack)
-    vca.gain.linearRampToValueAtTime(vcaLevel * sustain, now + attack + decay)
-    vca.gain.setValueAtTime(vcaLevel * sustain, now + attack + decay)
-    vca.gain.linearRampToValueAtTime(0, now + attack + decay + 0.05 + release)
+    // Cancel any ongoing envelope to prevent clicks, then start new one , using cancelHoldAtTime to allow for quick re-triggers without needing to return to zero first
+    if (vca.gain.cancelAndHoldAtTime) {
+      vca.gain.cancelAndHoldAtTime(now)
+    } else {
+      vca.gain.cancelScheduledValues(now)
+    }
+    // Short 5ms ramp to zero before attack — eliminates click from any
+    // residual gain value when a new note retriggers mid-envelope
+    const preAttack = 0.005
+    vca.gain.linearRampToValueAtTime(0, now + preAttack)
+    vca.gain.linearRampToValueAtTime(vcaLevel, now + preAttack + attack)
+    vca.gain.setValueAtTime(
+      vcaLevel * sustain,
+      now + preAttack + attack + decay
+    )
+    vca.gain.linearRampToValueAtTime(
+      vcaLevel * sustain,
+      now + preAttack + attack + decay
+    )
+    // Short 5ms ramp at release end instead of hard snap to zero
+    vca.gain.linearRampToValueAtTime(
+      0,
+      now + preAttack + attack + decay + 0.05 + release
+    )
   }, [attack, decay, sustain, release, vcaLevel, cables])
 
   // ── Sequencer ──────────────────────────────────────────────────────────────
