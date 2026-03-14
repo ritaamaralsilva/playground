@@ -933,7 +933,7 @@ export default function RackContainer() {
         <span
           style={{
             fontFamily: "'Bebas Neue', 'Impact', sans-serif",
-            fontSize: "clamp(32px, 18vw, 72px)",
+            fontSize: "clamp(28px, 10vw, 42px)",
             fontWeight: 700,
             color: "#e8e2d4",
             letterSpacing: "0.15em",
@@ -998,6 +998,72 @@ export default function RackContainer() {
 
   // ── MOBILE: Landscape — preset-only performance view ──────────────────────
   if (isMobile && !isPortrait) {
+    // mini patch view (modules + cables) from actual patch
+    // Rack layout for auto-patch: CLK → SEQ → OSC → FILTER → VCA → REVERB → DELAY → OUT
+    const MINI_MODULES = [
+      { id: "clock", label: "clock" },
+      { id: "seq", label: "seq" },
+      { id: "osc", label: "osc" },
+      { id: "filter", label: "filt" },
+      { id: "vca", label: "vca" },
+      { id: "reverb", label: "rvb" },
+      { id: "delay", label: "dly" },
+      { id: "out", label: "out" },
+    ]
+    // cable colour mapping for mini patch view (matches auto-patch cables)
+    const cableColorMap: Record<string, string> = {
+      "clock-out-seq-clock-in": CABLE_COLORS[0],
+      "clock-out-delay-clock-in": CABLE_COLORS[0],
+      "seq-cv-out-osc-voct-in": CABLE_COLORS[1],
+      "osc-out-filter-audio-in": CABLE_COLORS[2],
+      "lfo-out-filter-cv-in": CABLE_COLORS[3],
+      "lfo-out-osc-fm-in": CABLE_COLORS[3],
+      "filter-audio-out-vca-audio-in": CABLE_COLORS[4],
+      "adsr-env-out-vca-cv-in": CABLE_COLORS[5],
+      "seq-gate-out-adsr-gate-in": CABLE_COLORS[6],
+      "vca-out-reverb-audio-in": CABLE_COLORS[7],
+      "reverb-audio-out-delay-audio-in": CABLE_COLORS[8],
+      "delay-audio-out-out-in": CABLE_COLORS[9],
+    }
+    // derive cables for mini patch view from actual cables, using colour mapping above
+    const miniCables = cables
+      .filter((c) => {
+        const key1 = `${c.from}-${c.to}`
+        const key2 = `${c.to}-${c.from}`
+        return cableColorMap[key1] || cableColorMap[key2]
+      })
+      .map((c) => {
+        const key1 = `${c.from}-${c.to}`
+        const key2 = `${c.to}-${c.from}`
+        return {
+          from: c.from.split("-")[0], // get module id from port id
+          to: c.to.split("-")[0],
+          color: cableColorMap[key1] || cableColorMap[key2] || "#fff",
+        }
+      })
+
+    // SVG layout constants
+    const BOX_W = 38
+    const BOX_H = 24
+    const GAP = 16
+    const SVG_W = MINI_MODULES.length * BOX_W + (MINI_MODULES.length - 1) * GAP
+    const SVG_H = 90
+    const BOX_Y = 30 // y position of module boxes
+    const PORT_Y = BOX_Y + BOX_H // bottom port y
+    const TOP_PORT_Y = BOX_Y // top port y
+
+    // Centre x of module box by index
+    const cx = (i: number) => i * (BOX_W + GAP) + BOX_W / 2
+
+    // Module index lookup
+    const modIndex = (id: string) => MINI_MODULES.findIndex((m) => m.id === id)
+
+    // Separate sidechain cables (LFO→filter, ADSR→vca, seq-gate→adsr)
+    // from main chain cables so we can draw them differently
+    const SIDECHAIN_IDS = new Set(["lfo", "adsr"])
+    const mainCables = miniCables.filter((c) => !SIDECHAIN_IDS.has(c.from))
+    const sidechainCables = miniCables.filter((c) => SIDECHAIN_IDS.has(c.from))
+
     return (
       <div
         style={{
@@ -1008,18 +1074,19 @@ export default function RackContainer() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "1.5rem",
+          padding: "1rem 1.5rem",
           userSelect: "none",
+          boxSizing: "border-box",
         }}
       >
         <span
           style={{
             fontFamily: "'Bebas Neue', 'Impact', sans-serif",
-            fontSize: "28px",
+            fontSize: "22px",
             fontWeight: 700,
             color: "#e8e2d4",
             letterSpacing: "0.2em",
-            marginBottom: "4px",
+            marginBottom: "2px",
           }}
         >
           PLAYGROUND
@@ -1027,39 +1094,136 @@ export default function RackContainer() {
         <span
           style={{
             fontFamily: "'DM Mono', monospace",
-            fontSize: "8px",
+            fontSize: "7px",
             color: "#3a3028",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
-            marginBottom: "1.5rem",
+            marginBottom: "18px",
           }}
         >
           preset — auto patch
         </span>
-        <span
+
+        {/* Mini patch SVG */}
+        <svg
+          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "9px",
-            color: "#4a4030",
-            letterSpacing: "0.1em",
-            textAlign: "center",
-            marginBottom: "2rem",
-            lineHeight: 2,
+            width: "min(90vw, 480px)",
+            height: "auto",
+            overflow: "visible",
+            marginBottom: "18px",
           }}
         >
-          CLK → SEQ → OSC → FILTER → VCA → REVERB → DELAY → OUT
-        </span>
+          {/* Main chain cables — curved paths between module bottom ports */}
+          {mainCables.map((cable, i) => {
+            const fromIdx = modIndex(cable.from)
+            const toIdx = modIndex(cable.to)
+            if (fromIdx < 0 || toIdx < 0) return null
+            const x1 = cx(fromIdx)
+            const x2 = cx(toIdx)
+            const sag = 20
+            return (
+              <path
+                key={`main-${i}`}
+                d={`M${x1},${PORT_Y} C${x1},${PORT_Y + sag} ${x2},${
+                  PORT_Y + sag
+                } ${x2},${PORT_Y}`}
+                stroke={cable.color}
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                opacity="0.9"
+              />
+            )
+          })}
+
+          {/* Sidechain cables — dashed lines dropping into module top ports */}
+          {sidechainCables.map((cable, i) => {
+            const toIdx = modIndex(cable.to)
+            if (toIdx < 0) return null
+            const x = cx(toIdx)
+            const labelY = TOP_PORT_Y - 18
+            return (
+              <g key={`side-${i}`}>
+                <text
+                  x={x}
+                  y={labelY}
+                  textAnchor="middle"
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: "6px",
+                    fill: cable.color,
+                    letterSpacing: "0.08em",
+                    fontWeight: 700,
+                  }}
+                >
+                  {cable.from.toUpperCase()}
+                </text>
+                <line
+                  x1={x}
+                  y1={labelY + 4}
+                  x2={x}
+                  y2={TOP_PORT_Y}
+                  stroke={cable.color}
+                  strokeWidth="1.5"
+                  strokeDasharray="2 2"
+                  opacity="0.75"
+                />
+                <circle
+                  cx={x}
+                  cy={TOP_PORT_Y}
+                  r="2"
+                  fill={cable.color}
+                  opacity="0.9"
+                />
+              </g>
+            )
+          })}
+
+          {/* Module boxes */}
+          {MINI_MODULES.map((mod, i) => (
+            <g key={mod.id}>
+              <rect
+                x={cx(i) - BOX_W / 2}
+                y={BOX_Y}
+                width={BOX_W}
+                height={BOX_H}
+                rx={3}
+                fill="#0d0d0d"
+                stroke="#2a2a2a"
+                strokeWidth="1"
+              />
+              <text
+                x={cx(i)}
+                y={BOX_Y + BOX_H / 2 + 1}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: "7px",
+                  fill: "#c8c0b0",
+                  letterSpacing: "0.06em",
+                  fontWeight: 700,
+                }}
+              >
+                {mod.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+
+        {/* Vol knob */}
         <span
           style={{
             fontFamily: "'DM Mono', monospace",
-            fontSize: "9px",
+            fontSize: "8px",
             color: "#6e6860",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
-            marginBottom: "12px",
+            marginBottom: "8px",
           }}
         >
-          output volume
+          master volume
         </span>
         <Knob
           value={masterVol}
@@ -1067,7 +1231,7 @@ export default function RackContainer() {
           max={1}
           label="vol"
           sublabel={`${Math.round(masterVol * 100)}%`}
-          size={56}
+          size={52}
           onChange={(v) => {
             setMasterVol(v)
             if (masterGain.current && ctx.current)
