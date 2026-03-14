@@ -23,7 +23,7 @@ export function FilterModule({
   mkPort,
 }: FilterModuleProps) {
   return (
-    <ModuleFrontPanel title="filter" width={140} color="#1a1c1a">
+    <ModuleFrontPanel title="filter" width={140}>
       <div className="flex gap-1">
         {(["lowpass", "bandpass", "highpass"] as BiquadFilterType[]).map(
           (t) => (
