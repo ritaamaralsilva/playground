@@ -91,8 +91,8 @@ export default function RackContainer() {
   const seqNotesRef = useRef(seqNotes)
   const [scaleIdx, setScaleIdx] = useState(2)
   const [rootIdx, setRootIdx] = useState(0)
-  const [lfoRate, setLfoRate] = useState(440)
-  const [lfoDepth, setLfoDepth] = useState(10)
+  const [lfoRate, setLfoRate] = useState(0) // lfo inicia com freq a 0Hz
+  const [lfoDepth, setLfoDepth] = useState(0) // lfo inicia com depth a 0 
   const [oscFreq, setOscFreq] = useState(440)
   const [oscWaveIdx, setOscWaveIdx] = useState(1)
   const [attack, setAttack] = useState(1)
