@@ -31,6 +31,7 @@ export default function RackContainer() {
   const filterNode = useRef<BiquadFilterNode | null>(null)
   const vcaGain = useRef<GainNode | null>(null)
   const masterGain = useRef<GainNode | null>(null)
+  const graphMuteGain = useRef<GainNode | null>(null)
   const analyser = useRef<AnalyserNode | null>(null)
   const reverbConv = useRef<ConvolverNode | null>(null)
   const reverbWet = useRef<GainNode | null>(null)
@@ -58,6 +59,7 @@ export default function RackContainer() {
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const seqStepRef = useRef(0)
   const adsrTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+  const graphSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const audioStarted = useRef(false)
   const [waveCanvas, setWaveCanvas] = useState<HTMLCanvasElement | null>(null)
   const waveRef = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -303,12 +305,16 @@ export default function RackContainer() {
     const an = ac.createAnalyser()
     an.fftSize = 512
     analyser.current = an
-    master.connect(ac.destination)
-    master.connect(an)
+    const graphMute = ac.createGain()
+    graphMute.gain.value = 1
+    graphMuteGain.current = graphMute
+    master.connect(graphMute)
+    graphMute.connect(ac.destination)
+    graphMute.connect(an)
   }, []) // eslint-disable-line
 
   // ── Sync audio graph ───────────────────────────────────────────────────────
-  const syncGraph = useCallback(
+  const rebuildAudioGraph = useCallback(
     (newCables: Cable[]) => {
       const ac = ctx.current
       if (!ac) return
@@ -330,7 +336,6 @@ export default function RackContainer() {
         reverbWet,
         reverbDry,
         delayWet,
-        masterGain,
         ppWet,
         ppDry,
         ppMerger,
@@ -372,11 +377,7 @@ export default function RackContainer() {
       const dly = delayNode.current
       const dwet = delayWet.current
       const master = masterGain.current
-      const an = analyser.current
-      if (!osc || !lg || !filt || !vca || !env || !master || !an) return
-
-      master.connect(ac.destination)
-      master.connect(an)
+      if (!osc || !lg || !filt || !vca || !env || !master) return
 
       if (lk("lfo-out", "filter-cv-in")) lg.connect(filt.frequency)
       if (lk("lfo-out", "osc-fm-in")) lg.connect(osc.frequency)
@@ -461,10 +462,44 @@ export default function RackContainer() {
         osc.connect(master)
       }
 
-      master.gain.setTargetAtTime(masterVol, ac.currentTime, 0.05)
     },
-    [lfoDepth, masterVol, pingPong]
-  ) // eslint-disable-line
+    [lfoDepth, pingPong]
+  )
+
+  const syncGraph = useCallback(
+    (newCables: Cable[]) => {
+      const ac = ctx.current
+      const graphMute = graphMuteGain.current
+      if (!ac || !graphMute) return
+
+      const now = ac.currentTime
+      if (graphMute.gain.cancelAndHoldAtTime) {
+        graphMute.gain.cancelAndHoldAtTime(now)
+      } else {
+        graphMute.gain.cancelScheduledValues(now)
+        graphMute.gain.setValueAtTime(graphMute.gain.value, now)
+      }
+      graphMute.gain.linearRampToValueAtTime(0, now + 0.005)
+
+      if (graphSyncTimer.current) clearTimeout(graphSyncTimer.current)
+      graphSyncTimer.current = setTimeout(() => {
+        graphSyncTimer.current = null
+        try {
+          rebuildAudioGraph(newCables)
+        } finally {
+          const currentContext = ctx.current
+          const currentMute = graphMuteGain.current
+          if (currentContext && currentMute) {
+            const rebuildTime = currentContext.currentTime
+            currentMute.gain.cancelScheduledValues(rebuildTime)
+            currentMute.gain.setValueAtTime(0, rebuildTime)
+            currentMute.gain.linearRampToValueAtTime(1, rebuildTime + 0.005)
+          }
+        }
+      }, 10)
+    },
+    [rebuildAudioGraph]
+  )
 
   function routeToFX(
     src: AudioNode,
@@ -839,6 +874,13 @@ export default function RackContainer() {
     setColorIdx(0)
     syncGraph(AUTO_PATCH_CABLES)
   }, [initAudio, syncGraph]) // eslint-disable-line
+
+  useEffect(
+    () => () => {
+      if (graphSyncTimer.current) clearTimeout(graphSyncTimer.current)
+    },
+    []
+  )
 
   // ── Mobile: auto-patch on landscape entry ─────────────────────────────────
   useEffect(() => {
