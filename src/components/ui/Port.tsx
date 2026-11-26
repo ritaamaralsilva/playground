@@ -23,8 +23,7 @@ export function Port({
 }: PortProps) {
   const isOut = def.type === "output"
 
-  // Aluminum ring colour — different for input vs output
-  const ringColor = isOut ? "#8a8078" : "#6e6a65"
+  const activeColor = cableColor ?? "var(--module-accent)"
 
   return (
     <div
@@ -40,23 +39,22 @@ export function Port({
         data-port={def.id}
         data-porttype={def.type}
         onClick={() => onClick(def.id)}
-        className="rounded-full cursor-crosshair flex-shrink-0 flex items-center justify-center"
+        className="rounded-full cursor-pointer flex-shrink-0 flex items-center justify-center"
         style={{
-          width: 12,
-          height: 12,
-          background: connected
-            ? "#0a0a0a"
-            : `radial-gradient(circle at 38% 30%, #3a3632, #1a1816)`,
+          width: 14,
+          height: 14,
+          background:
+            "radial-gradient(circle, #151a1e 0 28%, #717c84 31% 43%, #d2d8dc 48% 62%, #59636b 68% 100%)",
           border: connected
-            ? `2px solid ${cableColor}`
+            ? `2px solid ${activeColor}`
             : highlighted
-            ? "2px solid #e8e2d4"
-            : `2px solid ${ringColor}`,
+            ? "2px solid var(--module-accent)"
+            : "1px solid #30383f",
           boxShadow: highlighted
-            ? `0 0 6px rgba(232,226,212,0.5), inset 0 1px 2px rgba(0,0,0,0.8)`
+            ? `0 0 7px color-mix(in srgb, var(--module-accent) 55%, transparent), inset 0 1px 2px rgb(0 0 0 / 45%)`
             : connected
-            ? `0 0 5px ${cableColor}66, inset 0 1px 2px rgba(0,0,0,0.8)`
-            : `0 1px 3px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)`,
+            ? `0 0 5px ${activeColor}88, inset 0 1px 2px rgb(0 0 0 / 45%)`
+            : "0 1px 2px rgb(0 0 0 / 40%), inset 0 1px 0 rgb(255 255 255 / 55%)",
           opacity: dragging && !highlighted && !connected ? 0.3 : 1,
           transition: "border-color 0.1s, box-shadow 0.1s",
         }}
@@ -64,21 +62,24 @@ export function Port({
         <div
           className="rounded-full"
           style={{
-            width: 7,
-            height: 7,
-            background: connected ? cableColor : "#000",
-            boxShadow: "inset 0 1px 2px rgba(0,0,0,0.9)",
+            width: 5,
+            height: 5,
+            background: connected ? activeColor : "#11161a",
+            border: "1px solid #77828a",
+            boxShadow: connected
+              ? `0 0 4px ${activeColor}`
+              : "inset 0 1px 2px rgb(0 0 0 / 80%)",
           }}
         />
       </div>
       <span
         style={{
-          fontFamily: "'DM Mono', 'Courier New', monospace",
-          fontSize: "6px",
-          fontWeight: 600,
-          letterSpacing: "0.08em",
+          fontFamily: "var(--font-mono)",
+          fontSize: "7px",
+          fontWeight: 500,
+          letterSpacing: "0.02em",
           textTransform: "uppercase",
-          color: connected ? "#b0a898" : "#6e6860",
+          color: connected ? "var(--ink)" : "var(--muted)",
           lineHeight: 1,
           maxWidth: 44,
           overflow: "hidden",

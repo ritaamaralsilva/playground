@@ -19,7 +19,7 @@ export function LfoModule({
   mkPort,
 }: LfoModuleProps) {
   return (
-    <ModuleFrontPanel title="lfo" width={95}>
+    <ModuleFrontPanel title="lfo" width={95} tone="lfo">
       <Knob
         value={lfoRate}
         min={0.01}

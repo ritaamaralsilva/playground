@@ -37,22 +37,26 @@ export function DelayModule({
   mkPort,
 }: DelayModuleProps) {
   return (
-    <ModuleFrontPanel title="delay" width={135}>
+    <ModuleFrontPanel title="delay" width={135} tone="delay">
       {/* Mode toggle */}
       <div className="flex gap-1 w-full">
         <button
           onClick={() => onPingPongToggle(false)}
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-sans)",
             fontSize: "7px",
             textTransform: "uppercase",
             padding: "2px 8px",
             borderRadius: "3px",
             cursor: "pointer",
             flex: 1,
-            background: !pingPong ? "#1c1000" : "#080808",
-            color: !pingPong ? "#f5a623" : "#4a4440",
-            border: !pingPong ? "1px solid #5a3800" : "1px solid #1a1a1a",
+            background: !pingPong
+              ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
+              : "var(--surface-raised)",
+            color: !pingPong ? "var(--module-accent)" : "var(--muted)",
+            border: !pingPong
+              ? "1px solid color-mix(in srgb, var(--module-accent) 48%, var(--line))"
+              : "1px solid var(--line)",
           }}
         >
           basic
@@ -60,16 +64,20 @@ export function DelayModule({
         <button
           onClick={() => onPingPongToggle(true)}
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-sans)",
             fontSize: "7px",
             textTransform: "uppercase",
             padding: "2px 8px",
             borderRadius: "3px",
             cursor: "pointer",
             flex: 1,
-            background: pingPong ? "#1c1000" : "#080808",
-            color: pingPong ? "#f5a623" : "#4a4440",
-            border: pingPong ? "1px solid #5a3800" : "1px solid #1a1a1a",
+            background: pingPong
+              ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
+              : "var(--surface-raised)",
+            color: pingPong ? "var(--module-accent)" : "var(--muted)",
+            border: pingPong
+              ? "1px solid color-mix(in srgb, var(--module-accent) 48%, var(--line))"
+              : "1px solid var(--line)",
           }}
         >
           ping pong
@@ -81,9 +89,9 @@ export function DelayModule({
         <div className="flex flex-col gap-1 w-full px-2">
           <span
             style={{
-              fontFamily: "'DM Mono', 'Courier New', monospace",
+              fontFamily: "var(--font-sans)",
               fontSize: "8px",
-              color: "#6e6860",
+              color: "var(--muted)",
               letterSpacing: "0.15em",
               textTransform: "uppercase",
             }}
@@ -96,17 +104,19 @@ export function DelayModule({
                 key={d}
                 onClick={() => onPpDivisionChange(d)}
                 style={{
-                  fontFamily: "'DM Mono', monospace",
+                  fontFamily: "var(--font-sans)",
                   fontSize: "8px",
                   padding: "2px 5px",
                   borderRadius: "3px",
                   cursor: "pointer",
-                  background: ppDivision === d ? "#1c1000" : "#080808",
-                  color: ppDivision === d ? "#f5a623" : "#4a4440",
+                  background: ppDivision === d
+                    ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
+                    : "var(--surface-raised)",
+                  color: ppDivision === d ? "var(--module-accent)" : "var(--muted)",
                   border:
                     ppDivision === d
-                      ? "1px solid #5a3800"
-                      : "1px solid #1a1a1a",
+                      ? "1px solid color-mix(in srgb, var(--module-accent) 48%, var(--line))"
+                      : "1px solid var(--line)",
                 }}
               >
                 1/{d}
@@ -115,9 +125,9 @@ export function DelayModule({
           </div>
           <span
             style={{
-              fontFamily: "'DM Mono', monospace",
+              fontFamily: "var(--font-mono)",
               fontSize: "8px",
-              color: "#6a5030",
+              color: "var(--module-accent)",
             }}
           >
             {(ppDelayTime * 1000).toFixed(0)}ms @ {Math.round(bpm)} bpm
@@ -128,9 +138,9 @@ export function DelayModule({
         (clocked ? (
           <span
             style={{
-              fontFamily: "'DM Mono', monospace",
+              fontFamily: "var(--font-mono)",
               fontSize: "8px",
-              color: "#6a5030",
+              color: "var(--module-accent)",
             }}
           >
             {(60000 / bpm).toFixed(0)}ms @ {Math.round(bpm)} bpm

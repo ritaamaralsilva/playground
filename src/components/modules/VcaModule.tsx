@@ -17,7 +17,7 @@ export function VcaModule({
   mkPort,
 }: VcaModuleProps) {
   return (
-    <ModuleFrontPanel title="vca" width={110}>
+    <ModuleFrontPanel title="vca" width={110} tone="vca">
       <Knob
         value={vcaLevel}
         min={0}
@@ -31,7 +31,10 @@ export function VcaModule({
         width={90}
         height={28}
         className="rounded"
-        style={{ background: "#050505", border: "1px solid #1e1a14" }}
+        style={{
+          background: "color-mix(in srgb, var(--module-accent) 8%, var(--surface))",
+          border: "1px solid color-mix(in srgb, var(--module-accent) 36%, var(--line))",
+        }}
       />
       <PortSection>
         {mkPort({ id: "vca-cv-in", label: "cv in", type: "input" })}

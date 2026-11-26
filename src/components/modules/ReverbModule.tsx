@@ -19,7 +19,7 @@ export function ReverbModule({
   mkPort,
 }: ReverbModuleProps) {
   return (
-    <ModuleFrontPanel title="reverb" width={110}>
+    <ModuleFrontPanel title="reverb" width={110} tone="reverb">
       <Knob
         value={reverbSize}
         min={0.01}

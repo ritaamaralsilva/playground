@@ -1,15 +1,17 @@
 export const CABLE_COLORS = [
-  "#f5a623",
-  "#e74c3c",
-  "#2ecc71",
-  "#3498db",
-  "#9b59b6",
-  "#1abc9c",
-  "#e67e22",
-  "#e91e8c",
-  "#00bcd4",
-  "#ff5722",
+  "#568fd0",
+  "#d95d8c",
+  "#319e79",
+  "#637be0",
+  "#258e93",
+  "#9770d4",
+  "#d67c56",
+  "#a35bc0",
+  "#b78a24",
+  "#ca4d7b",
 ]
+
+export const WAVEFORM_COLOR = "#ca4d7b"
 
 export const WAVEFORMS: OscillatorType[] = [
   "sine",

@@ -18,17 +18,17 @@ interface SequencerModuleProps {
 }
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: "'DM Mono', 'Courier New', monospace",
+  fontFamily: "var(--font-sans)",
   fontSize: "8px",
-  color: "#6e6860",
+  color: "var(--muted)",
   letterSpacing: "0.15em",
   textTransform: "uppercase",
 }
 
 const arrowStyle: React.CSSProperties = {
-  fontFamily: "'DM Mono', 'Courier New', monospace",
+  fontFamily: "var(--font-sans)",
   fontSize: "10px",
-  color: "#6e6860",
+  color: "var(--module-accent)",
   lineHeight: 1,
   background: "none",
   border: "none",
@@ -47,7 +47,7 @@ export function SequencerModule({
   mkPort,
 }: SequencerModuleProps) {
   return (
-    <ModuleFrontPanel title="5 STEP SEQUENCER" width={270}>
+    <ModuleFrontPanel title="5 STEP SEQUENCER" width={270} tone="sequencer">
       <div
         style={{
           display: "flex",
@@ -150,15 +150,18 @@ export function SequencerModule({
                   height: 6,
                   marginTop: "24px",
                   marginBottom: "4px",
-                  background: seqStep === i ? "#f5a623" : "#1a1510",
+                  background:
+                    seqStep === i
+                      ? "var(--module-accent)"
+                      : "color-mix(in srgb, var(--module-accent) 14%, var(--surface))",
                   boxShadow:
                     seqStep === i
-                      ? "0 0 6px #f5a623, 0 0 2px #f5a623"
+                      ? "0 0 7px color-mix(in srgb, var(--module-accent) 42%, transparent)"
                       : "none",
                   border:
                     seqStep === i
-                      ? "1px solid #f5a623"
-                      : "1px solid #2a2520",
+                      ? "1px solid var(--module-accent)"
+                      : "1px solid var(--line)",
                 }}
               />
               <Knob

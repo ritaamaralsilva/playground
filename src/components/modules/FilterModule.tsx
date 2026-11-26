@@ -23,7 +23,7 @@ export function FilterModule({
   mkPort,
 }: FilterModuleProps) {
   return (
-    <ModuleFrontPanel title="filter" width={120}>
+    <ModuleFrontPanel title="filter" width={120} tone="filter">
       <div className="flex gap-1">
         {(["lowpass", "bandpass", "highpass"] as BiquadFilterType[]).map(
           (t) => (
@@ -32,12 +32,14 @@ export function FilterModule({
               onClick={() => onTypeChange(t)}
               className="text-[7px] font-mono uppercase px-1.5 py-0.5 rounded transition-all"
               style={{
-                background: filterType === t ? "#2a1f00" : "#080808",
-                color: filterType === t ? "#f5a623" : "#4a4440",
+                background: filterType === t
+                  ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
+                  : "var(--surface-raised)",
+                color: filterType === t ? "var(--module-accent)" : "var(--muted)",
                 border:
                   filterType === t
-                    ? "1px solid #5a3800"
-                    : "1px solid #1a1a1a",
+                    ? "1px solid color-mix(in srgb, var(--module-accent) 48%, var(--line))"
+                    : "1px solid var(--line)",
               }}
             >
               {t === "lowpass" ? "LP" : t === "bandpass" ? "BP" : "HP"}

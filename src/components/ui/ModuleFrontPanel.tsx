@@ -1,66 +1,59 @@
 import type { ReactNode } from "react"
 
+export type ModuleTone =
+  | "clock"
+  | "sequencer"
+  | "envelope"
+  | "lfo"
+  | "oscillator"
+  | "filter"
+  | "vca"
+  | "reverb"
+  | "delay"
+  | "output"
+
 export function ModuleFrontPanel({
   title,
   width,
+  tone,
   children,
 }: {
   title: string
   width: number
+  tone: ModuleTone
   children: ReactNode
 }) {
   return (
     <div
-      className="flex flex-col flex-shrink-0"
+      className="module-panel flex flex-col flex-shrink-0"
+      data-tone={tone}
       style={{
         width,
-        background: "#000",
-        border: "1px solid #1c1c1c",
         minHeight: 340,
         position: "relative",
         zIndex: 10,
       }}
     >
-      {/* Title bar */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          padding: "10px 6px 8px",
-          borderBottom: "1px solid #1e1e1e",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "'Bebas Neue', 'Impact', sans-serif",
-            fontSize: "22px",
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            color: "#e8e2d4",
-            lineHeight: 1,
-            textTransform: "uppercase",
-          }}
-        >
-          {title}
-        </span>
+      <span
+        aria-hidden="true"
+        className="module-panel__screw module-panel__screw--top-left"
+      />
+      <span
+        aria-hidden="true"
+        className="module-panel__screw module-panel__screw--top-right"
+      />
+      <span
+        aria-hidden="true"
+        className="module-panel__screw module-panel__screw--bottom-left"
+      />
+      <span
+        aria-hidden="true"
+        className="module-panel__screw module-panel__screw--bottom-right"
+      />
+      <div className="module-panel__header">
+        <span className="module-panel__title">{title}</span>
       </div>
-
-      {/* Content — centered vertically */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          width: "100%",
-          flex: 1,
-          gap: "12px",
-          padding: "16px 12px 0 8px",
-          boxSizing: "border-box",
-        }}
-      >
-        {children}
-      </div>
+      <div className="module-panel__content">{children}</div>
     </div>
   )
 }
@@ -68,11 +61,12 @@ export function ModuleFrontPanel({
 export function PortSection({ children }: { children: ReactNode }) {
   return (
     <div
+      className="module-port-section"
       style={{
-        width: "100%",
+        width: "calc(100% - 10px)",
         marginTop: "auto",
-        borderTop: "1px solid #1a1a1a",
-        padding: "8px 10px 10px 10px",
+        marginBottom: "8px",
+        padding: "8px 7px",
         display: "flex",
         flexDirection: "column",
         gap: "6px",

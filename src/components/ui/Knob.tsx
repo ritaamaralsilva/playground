@@ -61,12 +61,12 @@ export function Knob({
       {/* Label above knob */}
       <span
         style={{
-          fontFamily: "'DM Mono', 'Courier New', monospace",
+          fontFamily: "var(--font-sans)",
           fontSize: "9px",
-          fontWeight: 700,
-          letterSpacing: "0.18em",
+          fontWeight: 600,
+          letterSpacing: "0.06em",
           textTransform: "uppercase",
-          color: "#c8c0b0",
+          color: "var(--ink)",
           lineHeight: 1,
           textAlign: "center",
           whiteSpace: "nowrap",
@@ -77,24 +77,29 @@ export function Knob({
 
       {/* Knob body */}
       <div
-        className="relative rounded-full cursor-pointer select-none flex-shrink-0"
+        className="relative cursor-pointer select-none flex-shrink-0"
         style={{
           width: size,
           height: size,
-          // Cream/off-white aluminum finish — subtle radial gradient
           background: `
-            radial-gradient(circle at 36% 30%,
-              #f0ece4 0%,
-              #ddd8ce 45%,
-              #b8b3aa 100%
+            radial-gradient(circle at 30% 23%, rgb(255 255 255 / 82%) 0 8%, transparent 30%),
+            radial-gradient(circle at 72% 78%, color-mix(in srgb, var(--module-accent) 35%, #f29cca), transparent 58%),
+            linear-gradient(
+              145deg,
+              color-mix(in srgb, var(--module-accent) 28%, #ffffff),
+              var(--module-accent) 56%,
+              color-mix(in srgb, var(--module-accent) 38%, #30223b)
             )
           `,
-          border: "1.5px solid #8a8580",
+          border: "2px solid color-mix(in srgb, var(--module-accent) 62%, #ffffff)",
+          borderRadius: "25% 75% 58% 42% / 62% 31% 69% 38%",
           touchAction: "none",
           boxShadow: `
-            0 4px 10px rgba(0,0,0,0.95),
-            0 1px 0 rgba(255,255,255,0.15) inset,
-            0 -1px 0 rgba(0,0,0,0.4) inset
+            0 2px 3px rgb(31 28 42 / 35%),
+            0 0 0 2px color-mix(in srgb, var(--module-accent) 25%, #f4e9ff),
+            0 3px 9px color-mix(in srgb, var(--module-accent) 48%, transparent),
+            0 1px 2px rgb(255 255 255 / 72%) inset,
+            0 -3px 4px rgb(43 24 59 / 34%) inset
           `,
           transform: `rotate(${deg}deg)`,
         }}
@@ -107,17 +112,32 @@ export function Knob({
           startY.current = null
         }}
       >
-        {/* Position indicator dot */}
+        <div
+          aria-hidden="true"
+          className="absolute"
+          style={{
+            width: Math.max(6, size * 0.24),
+            height: Math.max(3, size * 0.12),
+            top: Math.max(4, size * 0.18),
+            left: Math.max(6, size * 0.22),
+            borderRadius: "60% 40% 55% 45%",
+            background: "rgb(255 255 255 / 58%)",
+            filter: "blur(0.4px)",
+            pointerEvents: "none",
+          }}
+        />
         <div
           className="absolute rounded-full"
           style={{
-            width: 3.5,
-            height: 3.5,
-            background: "#1a1510",
-            top: 6,
+            width: 2,
+            height: Math.max(6, size * 0.25),
+            borderRadius: 2,
+            background: "#fff8ff",
+            top: Math.max(4, size * 0.12),
             left: "50%",
             transform: "translateX(-50%)",
-            boxShadow: "0 0 0 0.5px rgba(0,0,0,0.6)",
+            boxShadow: "0 1px 2px rgb(37 22 50 / 70%), 0 0 4px rgb(255 255 255 / 60%)",
+            pointerEvents: "none",
           }}
         />
       </div>
@@ -125,11 +145,11 @@ export function Knob({
       {/* Value sublabel below */}
       <span
         style={{
-          fontFamily: "'DM Mono', 'Courier New', monospace",
-          fontSize: "10px",
-          fontWeight: 700,
-          letterSpacing: "0.10em",
-          color: "#7a6a50",
+          fontFamily: "var(--font-mono)",
+          fontSize: "9px",
+          fontWeight: 500,
+          letterSpacing: "0.02em",
+          color: "var(--module-accent)",
           lineHeight: 1,
           textAlign: "center",
           whiteSpace: "nowrap",

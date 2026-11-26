@@ -27,7 +27,7 @@ export function EnvelopeModule({
   mkPort,
 }: EnvelopeModuleProps) {
   return (
-    <ModuleFrontPanel title="adsr" width={110}>
+    <ModuleFrontPanel title="adsr" width={110} tone="envelope">
       <Knob
         value={attack}
         min={0.001}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react"
 import type { PortId, PortDef, Cable, Point } from "../engine/types"
 import {
   CABLE_COLORS,
+  WAVEFORM_COLOR,
   WAVEFORMS,
   SCALE_NAMES,
 } from "../engine/constants"
@@ -84,7 +85,7 @@ export default function RackContainer() {
   const [scaleIdx, setScaleIdx] = useState(2)
   const [rootIdx, setRootIdx] = useState(0)
   const [lfoRate, setLfoRate] = useState(0) // lfo inicia com freq a 0Hz
-  const [lfoDepth, setLfoDepth] = useState(0) // lfo inicia com depth a 0 
+  const [lfoDepth, setLfoDepth] = useState(0) // lfo inicia com depth a 0
   const [oscFreq, setOscFreq] = useState(440)
   const [oscWaveIdx, setOscWaveIdx] = useState(1)
   const [attack, setAttack] = useState(1)
@@ -129,7 +130,7 @@ export default function RackContainer() {
   useEffect(() => {
     const check = () => {
       setIsMobile(
-        window.innerWidth < 1024 && window.innerHeight > window.innerWidth
+        window.innerWidth < 1024 && window.innerHeight > window.innerWidth,
       )
       setIsPortrait(window.innerHeight > window.innerWidth)
     }
@@ -155,7 +156,7 @@ export default function RackContainer() {
       const scale = Math.min(
         1,
         (window.innerWidth - 24) / width,
-        (window.innerHeight - 24) / height
+        (window.innerHeight - 24) / height,
       )
       setFitSize({ width, height })
       setFitScale(Math.max(scale, 0.1))
@@ -386,7 +387,7 @@ export default function RackContainer() {
           ? lfoDepth
           : 0,
         ac.currentTime,
-        0.05
+        0.05,
       )
 
       if (lk("osc-out", "filter-audio-in")) {
@@ -414,7 +415,7 @@ export default function RackContainer() {
           pWet,
           pDry,
           master,
-          pingPong
+          pingPong,
         )
       } else if (lk("osc-out", "vca-audio-in")) {
         osc.connect(vca)
@@ -436,7 +437,7 @@ export default function RackContainer() {
           pWet,
           pDry,
           master,
-          pingPong
+          pingPong,
         )
       } else if (lk("osc-out", "reverb-audio-in") && conv && rwet && rdry) {
         osc.connect(conv)
@@ -461,9 +462,8 @@ export default function RackContainer() {
       } else if (lk("osc-out", "out-in")) {
         osc.connect(master)
       }
-
     },
-    [lfoDepth, pingPong]
+    [lfoDepth, pingPong],
   )
 
   const syncGraph = useCallback(
@@ -498,7 +498,7 @@ export default function RackContainer() {
         }
       }, 10)
     },
-    [rebuildAudioGraph]
+    [rebuildAudioGraph],
   )
 
   function routeToFX(
@@ -514,7 +514,7 @@ export default function RackContainer() {
     pWet: GainNode | null,
     pDry: GainNode | null,
     master: GainNode,
-    isPingPong: boolean
+    isPingPong: boolean,
   ) {
     if (
       lk("reverb-audio-in", "vca-out") ||
@@ -594,18 +594,12 @@ export default function RackContainer() {
     const preAttack = 0.005
     env.gain.linearRampToValueAtTime(0, now + preAttack)
     env.gain.linearRampToValueAtTime(1, now + preAttack + attack)
-    env.gain.setValueAtTime(
-      sustain,
-      now + preAttack + attack + decay
-    )
-    env.gain.linearRampToValueAtTime(
-      sustain,
-      now + preAttack + attack + decay
-    )
+    env.gain.setValueAtTime(sustain, now + preAttack + attack + decay)
+    env.gain.linearRampToValueAtTime(sustain, now + preAttack + attack + decay)
     // Short 5ms ramp at release end instead of hard snap to zero
     env.gain.linearRampToValueAtTime(
       0,
-      now + preAttack + attack + decay + 0.05 + release
+      now + preAttack + attack + decay + 0.05 + release,
     )
   }, [attack, decay, sustain, release, cables])
 
@@ -622,12 +616,12 @@ export default function RackContainer() {
         const quantized = quantizeToScale(
           seqNotesRef.current[next],
           SCALE_NAMES[scaleIdx],
-          rootIdx
+          rootIdx,
         )
         oscNode.current.frequency.setTargetAtTime(
           midiToHz(quantized),
           ctx.current.currentTime,
-          0.01
+          0.01,
         )
       }
       if (linked("seq-gate-out", "adsr-gate-in")) triggerADSR()
@@ -660,7 +654,7 @@ export default function RackContainer() {
       lfoNode.current.frequency.setTargetAtTime(
         lfoRate,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [lfoRate])
   useEffect(() => {
@@ -670,7 +664,7 @@ export default function RackContainer() {
       lfoGain.current.gain.setTargetAtTime(
         on ? lfoDepth : 0,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
     }
   }, [lfoDepth, cables]) // eslint-disable-line
@@ -685,7 +679,7 @@ export default function RackContainer() {
       filterNode.current.frequency.setTargetAtTime(
         filterCutoff,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [filterCutoff])
   useEffect(() => {
@@ -693,7 +687,7 @@ export default function RackContainer() {
       filterNode.current.Q.setTargetAtTime(
         filterRes,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [filterRes])
   useEffect(() => {
@@ -701,7 +695,7 @@ export default function RackContainer() {
       masterGain.current.gain.setTargetAtTime(
         masterVol,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [masterVol])
   useEffect(() => {
@@ -713,7 +707,7 @@ export default function RackContainer() {
     reverbWet.current.gain.setTargetAtTime(
       reverbMix,
       ctx.current.currentTime,
-      0.05
+      0.05,
     )
   }, [reverbMix])
   useEffect(() => {
@@ -725,7 +719,7 @@ export default function RackContainer() {
       delayNode.current.delayTime.setTargetAtTime(
         delayTime,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [delayTime])
   useEffect(() => {
@@ -733,7 +727,7 @@ export default function RackContainer() {
       delayFbGain.current.gain.setTargetAtTime(
         delayFb,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [delayFb])
   useEffect(() => {
@@ -742,13 +736,13 @@ export default function RackContainer() {
       delayWet.current.gain.setTargetAtTime(
         delayMix,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
     if (ppWet.current)
       ppWet.current.gain.setTargetAtTime(
         delayMix * 2,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [delayMix])
   useEffect(() => {
@@ -761,19 +755,19 @@ export default function RackContainer() {
         ppDelayL.current.delayTime.setTargetAtTime(
           t,
           ctx.current.currentTime,
-          0.01
+          0.01,
         )
       if (ppDelayR.current)
         ppDelayR.current.delayTime.setTargetAtTime(
           t * 2,
           ctx.current.currentTime,
-          0.01
+          0.01,
         )
       if (delayNode.current)
         delayNode.current.delayTime.setTargetAtTime(
           60 / bpm,
           ctx.current.currentTime,
-          0.01
+          0.01,
         )
     }
   }, [bpm, ppDivision])
@@ -785,7 +779,7 @@ export default function RackContainer() {
       oscNode.current.frequency.setTargetAtTime(
         oscFreq,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [oscFreq, cables]) // eslint-disable-line
   useEffect(() => {
@@ -794,7 +788,7 @@ export default function RackContainer() {
       vcaGain.current.gain.setTargetAtTime(
         vcaLevel,
         ctx.current.currentTime,
-        0.05
+        0.05,
       )
   }, [vcaLevel])
   useEffect(() => {
@@ -822,7 +816,7 @@ export default function RackContainer() {
       const an = analyser.current
       if (an) an.getByteTimeDomainData(buf)
       c2d.clearRect(0, 0, canvas.width, canvas.height)
-      c2d.strokeStyle = "#f5a623"
+      c2d.strokeStyle = WAVEFORM_COLOR
       c2d.lineWidth = 1.5
       c2d.beginPath()
       for (let i = 0; i < canvas.width; i++) {
@@ -879,7 +873,7 @@ export default function RackContainer() {
     () => () => {
       if (graphSyncTimer.current) clearTimeout(graphSyncTimer.current)
     },
-    []
+    [],
   )
 
   // ── Mobile: auto-patch on landscape entry ─────────────────────────────────
@@ -908,7 +902,7 @@ export default function RackContainer() {
         const dup = cables.some(
           (c) =>
             (c.from === dragging.portId && c.to === portId) ||
-            (c.from === portId && c.to === dragging.portId)
+            (c.from === portId && c.to === dragging.portId),
         )
         if (dup) {
           setDragging(null)
@@ -926,7 +920,7 @@ export default function RackContainer() {
         syncGraph(nc)
       } else {
         const existIdx = cables.findIndex(
-          (c) => c.from === portId || c.to === portId
+          (c) => c.from === portId || c.to === portId,
         )
         if (existIdx >= 0) {
           const nc = cables.filter((_, i) => i !== existIdx)
@@ -937,7 +931,7 @@ export default function RackContainer() {
         setDragging({ portId, color: CABLE_COLORS[colorIdx] })
       }
     },
-    [dragging, cables, colorIdx, initAudio, syncGraph]
+    [dragging, cables, colorIdx, initAudio, syncGraph],
   )
 
   // ── Cable helpers ──────────────────────────────────────────────────────────
@@ -993,7 +987,7 @@ export default function RackContainer() {
         style={{
           width: "100%",
           height: "100dvh",
-          background: "#000",
+          background: "transparent",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -1006,17 +1000,17 @@ export default function RackContainer() {
           style={{
             width: 40,
             height: 1,
-            background: "#3a2800",
+            background: "var(--line-strong)",
             marginBottom: "2rem",
           }}
         />
         <span
           style={{
-            fontFamily: "'Bebas Neue', 'Impact', sans-serif",
+            fontFamily: "var(--font-sans)",
             fontSize: "clamp(28px, 10vw, 42px)",
-            fontWeight: 700,
-            color: "#e8e2d4",
-            letterSpacing: "0.15em",
+            fontWeight: 500,
+            color: "var(--ink)",
+            letterSpacing: "0.08em",
             lineHeight: 1,
             textAlign: "center",
           }}
@@ -1028,7 +1022,7 @@ export default function RackContainer() {
             width: "100%",
             maxWidth: 200,
             height: 1,
-            background: "#1e1e1e",
+            background: "var(--line)",
             margin: "1.5rem 0",
           }}
         />
@@ -1037,9 +1031,9 @@ export default function RackContainer() {
         </span>
         <span
           style={{
-            fontFamily: "'DM Mono', 'Courier New', monospace",
+            fontFamily: "var(--font-sans)",
             fontSize: "11px",
-            color: "#6e6860",
+            color: "var(--muted)",
             letterSpacing: "0.18em",
             textTransform: "uppercase",
             textAlign: "center",
@@ -1054,16 +1048,16 @@ export default function RackContainer() {
           style={{
             width: 40,
             height: 1,
-            background: "#3a2800",
+            background: "var(--line-strong)",
             marginTop: "2rem",
           }}
         />
         <a
           href="https://ritasilva.online"
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: "9px",
-            color: "#3a3028",
+            color: "var(--accent-primary)",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
             textDecoration: "none",
@@ -1081,14 +1075,14 @@ export default function RackContainer() {
     // mini patch view (modules + cables) from actual patch
     // Rack layout for auto-patch: CLK → SEQ → OSC → FILTER → VCA → REVERB → DELAY → OUT
     const MINI_MODULES = [
-      { id: "clock", label: "clock" },
-      { id: "seq", label: "seq" },
-      { id: "osc", label: "osc" },
-      { id: "filter", label: "filt" },
-      { id: "vca", label: "vca" },
-      { id: "reverb", label: "rvb" },
-      { id: "delay", label: "dly" },
-      { id: "out", label: "out" },
+      { id: "clock", label: "clock", tone: "clock" },
+      { id: "seq", label: "seq", tone: "sequencer" },
+      { id: "osc", label: "osc", tone: "oscillator" },
+      { id: "filter", label: "filt", tone: "filter" },
+      { id: "vca", label: "vca", tone: "vca" },
+      { id: "reverb", label: "rvb", tone: "reverb" },
+      { id: "delay", label: "dly", tone: "delay" },
+      { id: "out", label: "out", tone: "output" },
     ]
     // cable colour mapping for mini patch view (matches auto-patch cables)
     const cableColorMap: Record<string, string> = {
@@ -1118,7 +1112,7 @@ export default function RackContainer() {
         return {
           from: c.from.split("-")[0], // get module id from port id
           to: c.to.split("-")[0],
-          color: cableColorMap[key1] || cableColorMap[key2] || "#fff",
+          color: cableColorMap[key1] || cableColorMap[key2] || "var(--surface)",
         }
       })
 
@@ -1149,7 +1143,7 @@ export default function RackContainer() {
         style={{
           width: "100%",
           height: "100dvh",
-          background: "#000",
+          background: "transparent",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -1161,11 +1155,11 @@ export default function RackContainer() {
       >
         <span
           style={{
-            fontFamily: "'Bebas Neue', 'Impact', sans-serif",
+            fontFamily: "var(--font-sans)",
             fontSize: "22px",
-            fontWeight: 700,
-            color: "#e8e2d4",
-            letterSpacing: "0.2em",
+            fontWeight: 500,
+            color: "var(--ink)",
+            letterSpacing: "0.08em",
             marginBottom: "2px",
           }}
         >
@@ -1173,9 +1167,9 @@ export default function RackContainer() {
         </span>
         <span
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: "7px",
-            color: "#3a3028",
+            color: "var(--accent-primary)",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
             marginBottom: "18px",
@@ -1230,7 +1224,7 @@ export default function RackContainer() {
                   y={labelY}
                   textAnchor="middle"
                   style={{
-                    fontFamily: "'DM Mono', monospace",
+                    fontFamily: "var(--font-mono)",
                     fontSize: "6px",
                     fill: cable.color,
                     letterSpacing: "0.08em",
@@ -1269,8 +1263,8 @@ export default function RackContainer() {
                 width={BOX_W}
                 height={BOX_H}
                 rx={3}
-                fill="#0d0d0d"
-                stroke="#2a2a2a"
+                fill={`color-mix(in srgb, var(--tone-${mod.tone}) 15%, var(--surface))`}
+                stroke={`color-mix(in srgb, var(--tone-${mod.tone}) 55%, var(--line))`}
                 strokeWidth="1"
               />
               <text
@@ -1279,9 +1273,9 @@ export default function RackContainer() {
                 textAnchor="middle"
                 dominantBaseline="middle"
                 style={{
-                  fontFamily: "'DM Mono', monospace",
+                  fontFamily: "var(--font-mono)",
                   fontSize: "7px",
-                  fill: "#c8c0b0",
+                  fill: "var(--ink)",
                   letterSpacing: "0.06em",
                   fontWeight: 700,
                 }}
@@ -1295,9 +1289,9 @@ export default function RackContainer() {
         {/* Vol knob */}
         <span
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-sans)",
             fontSize: "8px",
-            color: "#6e6860",
+            color: "var(--muted)",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
             marginBottom: "8px",
@@ -1318,7 +1312,7 @@ export default function RackContainer() {
               masterGain.current.gain.setTargetAtTime(
                 v,
                 ctx.current.currentTime,
-                0.05
+                0.05,
               )
           }}
         />
@@ -1327,16 +1321,20 @@ export default function RackContainer() {
             width: 6,
             height: 6,
             borderRadius: "50%",
-            background: mobilePatchReady ? "#f5a623" : "#1a0e00",
-            boxShadow: mobilePatchReady ? "0 0 8px #f5a623" : "none",
+            background: mobilePatchReady
+              ? "var(--tone-lfo)"
+              : "color-mix(in srgb, var(--tone-lfo) 16%, var(--surface))",
+            boxShadow: mobilePatchReady
+              ? "0 0 8px color-mix(in srgb, var(--tone-lfo) 45%, transparent)"
+              : "none",
             marginTop: "16px",
           }}
         />
         <span
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: "7px",
-            color: mobilePatchReady ? "#6a5030" : "#2a2020",
+            color: mobilePatchReady ? "var(--tone-lfo)" : "var(--muted)",
             letterSpacing: "0.15em",
             textTransform: "uppercase",
             marginTop: "6px",
@@ -1347,9 +1345,9 @@ export default function RackContainer() {
         <a
           href="https://ritasilva.online"
           style={{
-            fontFamily: "'DM Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: "8px",
-            color: "#2a2820",
+            color: "var(--muted)",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
             textDecoration: "none",
@@ -1385,12 +1383,17 @@ export default function RackContainer() {
           cursor: dragging ? "none" : "default",
         }}
       >
+        <header className="desktop-brand">
+          <div className="desktop-brand__eyebrow">Rita Silva · Experiments</div>
+          <h1 className="desktop-brand__title">Modular Synth</h1>
+          <p className="desktop-brand__tagline">
+            An interactive space for sound exploration.
+          </p>
+        </header>
         <div
           ref={rackRef}
-          className="relative flex gap-2 rounded-xl"
+          className="rack-shell relative flex gap-[3px]"
           style={{
-            background: "#0d0d0d",
-            border: "2px solid #1a1a1a",
             width: "fit-content",
             //marginBottom: "120px",
           }}
@@ -1430,7 +1433,7 @@ export default function RackContainer() {
                     cy={p1.y}
                     r="4.5"
                     fill={cable.color}
-                    stroke="#fff"
+                    stroke="var(--surface)"
                     strokeWidth="1"
                   />
                   <circle
@@ -1438,7 +1441,7 @@ export default function RackContainer() {
                     cy={p2.y}
                     r="4.5"
                     fill={cable.color}
-                    stroke="#fff"
+                    stroke="var(--surface)"
                     strokeWidth="1"
                   />
                 </g>
@@ -1464,7 +1467,7 @@ export default function RackContainer() {
                       cy={mousePos.y}
                       r="6"
                       fill={dragging.color}
-                      stroke="#fff"
+                      stroke="var(--surface)"
                       strokeWidth="1.5"
                     />
                     <line
@@ -1593,122 +1596,122 @@ export default function RackContainer() {
           />
         </div>
 
-      {/* Status + controls */}
-      <div
-        className="flex flex-col items-center w-full"
-        style={{
-          maxWidth: "fit-content",
-          marginTop: "24px",
-        }}
-      >
-        <span
+        {/* Status + controls */}
+        <div
+          className="flex flex-col items-center w-full"
           style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "12px",
-            fontWeight: 800,
-            letterSpacing: "0.05em",
-            color: dragging
-              ? "#f5a623"
-              : cables.length > 0
-              ? "#c8b890"
-              : "#2e2e2e",
+            maxWidth: "fit-content",
+            marginTop: "24px",
           }}
         >
-          {dragging
-            ? "click destination port to connect"
-            : cables.length === 0
-            ? "patch a cable to start"
-            : `${cables.length} cable${cables.length !== 1 ? "s" : ""} patched`}
-        </span>
-        <div className="flex gap-2" style={{ marginTop: "16px" }}>
-          <button
-            onClick={() => {
-              setCables([])
-              syncGraph([])
-              setDragging(null)
-            }}
-            onMouseEnter={() => setBtnHover("clear")}
-            onMouseLeave={() => {
-              setBtnHover(null)
-              setBtnPress(null)
-            }}
-            onMouseDown={() => setBtnPress("clear")}
-            onMouseUp={() => setBtnPress(null)}
+          <span
             style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: "9px",
-              fontWeight: 700,
-              letterSpacing: "0.15em",
-              textTransform: "uppercase",
-              padding: "6px 12px",
-              borderRadius: "4px",
-              cursor: "pointer",
-              background:
-                btnPress === "clear"
-                  ? "#f5a623"
-                  : btnHover === "clear"
-                  ? "#2a1f00"
-                  : "#0a0a0a",
-              color:
-                btnPress === "clear"
-                  ? "#000"
-                  : btnHover === "clear"
-                  ? "#c8a060"
-                  : "#4a4440",
-              border:
-                btnPress === "clear"
-                  ? "1px solid #f5a623"
-                  : btnHover === "clear"
-                  ? "1px solid #5a3800"
-                  : "1px solid #1a1a1a",
-              transition: "background 0.1s, color 0.1s, border-color 0.1s",
+              fontFamily: "var(--font-sans)",
+              fontSize: "12px",
+              fontWeight: 800,
+              letterSpacing: "0.05em",
+              color: dragging
+                ? "var(--accent-primary)"
+                : cables.length > 0
+                  ? "var(--tone-lfo)"
+                  : "var(--muted)",
             }}
           >
-            clear all
-          </button>
-          <button
-            onClick={doAutoPatch}
-            onMouseEnter={() => setBtnHover("patch")}
-            onMouseLeave={() => {
-              setBtnHover(null)
-              setBtnPress(null)
-            }}
-            onMouseDown={() => setBtnPress("patch")}
-            onMouseUp={() => setBtnPress(null)}
-            style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: "9px",
-              fontWeight: 700,
-              letterSpacing: "0.15em",
-              textTransform: "uppercase",
-              padding: "6px 12px",
-              borderRadius: "4px",
-              cursor: "pointer",
-              background:
-                btnPress === "patch"
-                  ? "#f5a623"
-                  : btnHover === "patch"
-                  ? "#2a1f00"
-                  : "#0a0a0a",
-              color:
-                btnPress === "patch"
-                  ? "#000"
-                  : btnHover === "patch"
-                  ? "#c8a060"
-                  : "#6e6860",
-              border:
-                btnPress === "patch"
-                  ? "1px solid #f5a623"
-                  : btnHover === "patch"
-                  ? "1px solid #5a3800"
-                  : "1px solid #2a2018",
-              transition: "background 0.1s, color 0.1s, border-color 0.1s",
-            }}
-          >
-            auto patch
-          </button>
+            {dragging
+              ? "click destination port to connect"
+              : cables.length === 0
+                ? "patch a cable to start"
+                : `${cables.length} cable${cables.length !== 1 ? "s" : ""} patched`}
+          </span>
+          <div className="flex gap-2" style={{ marginTop: "16px" }}>
+            <button
+              onClick={() => {
+                setCables([])
+                syncGraph([])
+                setDragging(null)
+              }}
+              onMouseEnter={() => setBtnHover("clear")}
+              onMouseLeave={() => {
+                setBtnHover(null)
+                setBtnPress(null)
+              }}
+              onMouseDown={() => setBtnPress("clear")}
+              onMouseUp={() => setBtnPress(null)}
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "9px",
+                fontWeight: 700,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                padding: "6px 12px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                background:
+                  btnPress === "clear"
+                    ? "var(--accent-primary)"
+                    : btnHover === "clear"
+                      ? "color-mix(in srgb, var(--accent-primary) 16%, var(--surface))"
+                      : "var(--surface)",
+                color:
+                  btnPress === "clear"
+                    ? "var(--surface)"
+                    : btnHover === "clear"
+                      ? "var(--accent-primary)"
+                      : "var(--muted)",
+                border:
+                  btnPress === "clear"
+                    ? "1px solid var(--accent-primary)"
+                    : btnHover === "clear"
+                      ? "1px solid color-mix(in srgb, var(--accent-primary) 52%, var(--line))"
+                      : "1px solid var(--line)",
+                transition: "background 0.1s, color 0.1s, border-color 0.1s",
+              }}
+            >
+              clear all
+            </button>
+            <button
+              onClick={doAutoPatch}
+              onMouseEnter={() => setBtnHover("patch")}
+              onMouseLeave={() => {
+                setBtnHover(null)
+                setBtnPress(null)
+              }}
+              onMouseDown={() => setBtnPress("patch")}
+              onMouseUp={() => setBtnPress(null)}
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "9px",
+                fontWeight: 700,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                padding: "6px 12px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                background:
+                  btnPress === "patch"
+                    ? "var(--accent-primary)"
+                    : btnHover === "patch"
+                      ? "color-mix(in srgb, var(--accent-primary) 16%, var(--surface))"
+                      : "var(--surface)",
+                color:
+                  btnPress === "patch"
+                    ? "var(--surface)"
+                    : btnHover === "patch"
+                      ? "var(--accent-primary)"
+                      : "var(--muted)",
+                border:
+                  btnPress === "patch"
+                    ? "1px solid var(--accent-primary)"
+                    : btnHover === "patch"
+                      ? "1px solid color-mix(in srgb, var(--accent-primary) 52%, var(--line))"
+                      : "1px solid var(--line-strong)",
+                transition: "background 0.1s, color 0.1s, border-color 0.1s",
+              }}
+            >
+              auto patch
+            </button>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   )

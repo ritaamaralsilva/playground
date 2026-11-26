@@ -17,14 +17,18 @@ export function ClockModule({
   mkPort,
 }: ClockModuleProps) {
   return (
-    <ModuleFrontPanel title="clock" width={110}>
+    <ModuleFrontPanel title="clock" width={110} tone="clock">
       <div className="flex flex-col items-center gap-1">
         <DigitalDisplay value={`${Math.round(bpm)} bpm`} width={88} />
         <div
           className="w-2 h-2 rounded-full mt-1 transition-all duration-75"
           style={{
-            background: clockBeat ? "#f5a623" : "#1a0e00",
-            boxShadow: clockBeat ? "0 0 6px #f5a623" : "none",
+            background: clockBeat
+              ? "var(--module-accent)"
+              : "color-mix(in srgb, var(--module-accent) 16%, var(--surface))",
+            boxShadow: clockBeat
+              ? "0 0 8px color-mix(in srgb, var(--module-accent) 45%, transparent)"
+              : "none",
           }}
         />
       </div>
