@@ -23,27 +23,34 @@ export function Knob({
 }: KnobProps) {
   const startY = useRef<number | null>(null)
   const startVal = useRef(value)
+  const startScale = useRef(1)
   const pct = (value - min) / (max - min)
   const deg = pct * 270 - 135
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault()
+      e.currentTarget.setPointerCapture(e.pointerId)
       startY.current = e.clientY
       startVal.current = value
-      const onMove = (ev: MouseEvent) => {
-        if (startY.current === null) return
-        const delta = ((startY.current - ev.clientY) / 140) * (max - min)
-        onChange(Math.max(min, Math.min(max, startVal.current + delta)))
-      }
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove)
-        document.removeEventListener("mouseup", onUp)
-      }
-      document.addEventListener("mousemove", onMove)
-      document.addEventListener("mouseup", onUp)
+      const control = e.currentTarget.parentElement
+      const bounds = control?.getBoundingClientRect()
+      startScale.current =
+        bounds && control?.offsetWidth ? bounds.width / control.offsetWidth : 1
     },
-    [value, min, max, onChange]
+    [value]
+  )
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (startY.current === null) return
+      const delta =
+        ((startY.current - e.clientY) /
+          (140 * Math.max(startScale.current, 0.01))) *
+        (max - min)
+      onChange(Math.max(min, Math.min(max, startVal.current + delta)))
+    },
+    [min, max, onChange]
   )
 
   return (
@@ -83,6 +90,7 @@ export function Knob({
             )
           `,
           border: "1.5px solid #8a8580",
+          touchAction: "none",
           boxShadow: `
             0 4px 10px rgba(0,0,0,0.95),
             0 1px 0 rgba(255,255,255,0.15) inset,
@@ -90,7 +98,14 @@ export function Knob({
           `,
           transform: `rotate(${deg}deg)`,
         }}
-        onMouseDown={onMouseDown}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={() => {
+          startY.current = null
+        }}
+        onPointerCancel={() => {
+          startY.current = null
+        }}
       >
         {/* Position indicator dot */}
         <div

@@ -30,32 +30,32 @@ export function EnvelopeModule({
     <ModuleFrontPanel title="adsr" width={130}>
       <Knob
         value={attack}
-        min={0.001}
-        max={2}
+        min={0.01} // min attack set to 0.01s to avoid clicks
+        max={2} // 2s max attack time
         label="attack"
         sublabel={`${attack.toFixed(2)}s`}
         onChange={onAttackChange}
       />
       <Knob
         value={decay}
-        min={0.01}
-        max={2}
+        min={0.01} // min decay set to 0.01s to avoid clicks
+        max={2} // 2s max decay time
         label="decay"
         sublabel={`${decay.toFixed(2)}s`}
         onChange={onDecayChange}
       />
       <Knob
         value={sustain}
-        min={0}
-        max={1}
+        min={0.01} // min sustain set to 0.01s to avoid clicks
+        max={5} // 4s max sustain time
         label="sustain"
-        sublabel={`${Math.round(sustain * 100)}%`}
+        sublabel={`${sustain.toFixed(2)}s`} 
         onChange={onSustainChange}
       />
       <Knob
         value={release}
-        min={0.01}
-        max={4}
+        min={0.01} // min release set to 0.01s to avoid clicks
+        max={3} // 3s max release time
         label="release"
         sublabel={`${release.toFixed(2)}s`}
         onChange={onReleaseChange}

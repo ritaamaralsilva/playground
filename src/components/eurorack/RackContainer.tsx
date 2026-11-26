@@ -67,6 +67,7 @@ export default function RackContainer() {
   // ── Refs ───────────────────────────────────────────────────────────────────
   const portRefs = useRef<Partial<Record<PortId, HTMLDivElement>>>({})
   const rackRef = useRef<HTMLDivElement>(null)
+  const fitContentRef = useRef<HTMLDivElement>(null)
   const waveRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -96,8 +97,8 @@ export default function RackContainer() {
   const [oscFreq, setOscFreq] = useState(440)
   const [oscWaveIdx, setOscWaveIdx] = useState(1)
   const [attack, setAttack] = useState(1)
-  const [decay, setDecay] = useState(0.8)
-  const [sustain, setSustain] = useState(0.7)
+  const [decay, setDecay] = useState(1)
+  const [sustain, setSustain] = useState(1)
   const [release, setRelease] = useState(1.2)
   const [filterType, setFilterType] = useState<BiquadFilterType>("lowpass")
   const [filterCutoff, setFilterCutoff] = useState(1200)
@@ -127,20 +128,51 @@ export default function RackContainer() {
   const [isMobile, setIsMobile] = useState(false)
   const [isPortrait, setIsPortrait] = useState(false)
   const [mobilePatchReady, setMobilePatchReady] = useState(false)
+  const [fitScale, setFitScale] = useState(1)
+  const [fitSize, setFitSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     const check = () => {
-      setIsMobile(window.innerWidth < 1024)
+      setIsMobile(
+        window.innerWidth < 1024 && window.innerHeight > window.innerWidth
+      )
       setIsPortrait(window.innerHeight > window.innerWidth)
     }
+    const onOrientationChange = () => window.setTimeout(check, 100)
     check()
     window.addEventListener("resize", check)
-    window.addEventListener("orientationchange", () => setTimeout(check, 100))
+    window.addEventListener("orientationchange", onOrientationChange)
     return () => {
       window.removeEventListener("resize", check)
-      window.removeEventListener("orientationchange", () =>
-        setTimeout(check, 100)
+      window.removeEventListener("orientationchange", onOrientationChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    const content = fitContentRef.current
+    if (!content) return
+
+    const updateFit = () => {
+      const width = content.offsetWidth
+      const height = content.offsetHeight
+      if (!width || !height) return
+
+      const scale = Math.min(
+        1,
+        (window.innerWidth - 24) / width,
+        (window.innerHeight - 24) / height
       )
+      setFitSize({ width, height })
+      setFitScale(Math.max(scale, 0.1))
+    }
+
+    const observer = new ResizeObserver(updateFit)
+    observer.observe(content)
+    window.addEventListener("resize", updateFit)
+    updateFit()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", updateFit)
     }
   }, [])
 
@@ -773,11 +805,15 @@ export default function RackContainer() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const r = rackRef.current?.getBoundingClientRect()
-      if (r) setMousePos({ x: e.clientX - r.left, y: e.clientY - r.top })
+      if (r)
+        setMousePos({
+          x: (e.clientX - r.left) / fitScale,
+          y: (e.clientY - r.top) / fitScale,
+        })
     }
     window.addEventListener("mousemove", onMove)
     return () => window.removeEventListener("mousemove", onMove)
-  }, [])
+  }, [fitScale])
 
   // ── Auto patch cables ──────────────────────────────────────────────────────
   const AUTO_PATCH_CABLES: Cable[] = [
@@ -868,8 +904,8 @@ export default function RackContainer() {
     const pr = el.getBoundingClientRect()
     const rr = rack.getBoundingClientRect()
     return {
-      x: pr.left + pr.width / 2 - rr.left,
-      y: pr.top + pr.height / 2 - rr.top,
+      x: (pr.left + pr.width / 2 - rr.left) / fitScale,
+      y: (pr.top + pr.height / 2 - rr.top) / fitScale,
     }
   }
 
@@ -1286,12 +1322,24 @@ export default function RackContainer() {
   // ── DESKTOP / TABLET: Full rack ────────────────────────────────────────────
   return (
     <div
-      className="flex flex-col items-center gap-3 p-4 select-none w-full overflow-hidden"
-      style={{ cursor: dragging ? "none" : "default" }}
+      style={{
+        position: "relative",
+        width: fitSize.width * fitScale,
+        height: fitSize.height * fitScale,
+        flexShrink: 0,
+      }}
     >
       <div
-        className="relative flex gap-2 rounded-xl p-3"
-        style={{ marginBottom: "0px" }}
+        ref={fitContentRef}
+        className="flex flex-col items-center gap-3 p-4 select-none w-max"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          transform: `scale(${fitScale})`,
+          transformOrigin: "top left",
+          cursor: dragging ? "none" : "default",
+        }}
       >
         <div
           ref={rackRef}
@@ -1586,9 +1634,9 @@ export default function RackContainer() {
             <Knob
               value={sustain}
               min={0}
-              max={1}
+              max={5}
               label="sustain"
-              sublabel={`${Math.round(sustain * 100)}%`}
+              sublabel={`${sustain.toFixed(2)}s`}
               onChange={setSustain}
             />
             <Knob
@@ -1922,7 +1970,6 @@ export default function RackContainer() {
             </PortSection>
           </ModuleFrontPanel>
         </div>
-      </div>
 
       {/* Status + controls */}
       <div
@@ -2039,6 +2086,7 @@ export default function RackContainer() {
             auto patch
           </button>
         </div>
+      </div>
       </div>
     </div>
   )
