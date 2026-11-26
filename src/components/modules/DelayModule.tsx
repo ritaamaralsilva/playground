@@ -11,6 +11,7 @@ interface DelayModuleProps {
   ppDivision: number
   ppDelayTime: number
   bpm: number
+  clocked: boolean
   onPpDivisionChange: (d: number) => void
   onTimeChange: (v: number) => void
   onFbChange: (v: number) => void
@@ -27,6 +28,7 @@ export function DelayModule({
   ppDivision,
   ppDelayTime,
   bpm,
+  clocked,
   onPpDivisionChange,
   onTimeChange,
   onFbChange,
@@ -35,27 +37,39 @@ export function DelayModule({
   mkPort,
 }: DelayModuleProps) {
   return (
-    <ModuleFrontPanel title="delay" width={140}>
+    <ModuleFrontPanel title="delay" width={135}>
       {/* Mode toggle */}
       <div className="flex gap-1 w-full">
         <button
           onClick={() => onPingPongToggle(false)}
-          className="text-[7px] font-mono uppercase px-2 py-0.5 rounded transition-all flex-1"
           style={{
-            background: !pingPong ? "#1a1a3a" : "#141414",
-            color: !pingPong ? "#4e9eff" : "#444",
-            border: !pingPong ? "1px solid #2a2a6a" : "1px solid #222",
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "7px",
+            textTransform: "uppercase",
+            padding: "2px 8px",
+            borderRadius: "3px",
+            cursor: "pointer",
+            flex: 1,
+            background: !pingPong ? "#1c1000" : "#080808",
+            color: !pingPong ? "#f5a623" : "#4a4440",
+            border: !pingPong ? "1px solid #5a3800" : "1px solid #1a1a1a",
           }}
         >
           basic
         </button>
         <button
           onClick={() => onPingPongToggle(true)}
-          className="text-[7px] font-mono uppercase px-2 py-0.5 rounded transition-all flex-1"
           style={{
-            background: pingPong ? "#1a1a3a" : "#141414",
-            color: pingPong ? "#4e9eff" : "#444",
-            border: pingPong ? "1px solid #2a2a6a" : "1px solid #222",
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "7px",
+            textTransform: "uppercase",
+            padding: "2px 8px",
+            borderRadius: "3px",
+            cursor: "pointer",
+            flex: 1,
+            background: pingPong ? "#1c1000" : "#080808",
+            color: pingPong ? "#f5a623" : "#4a4440",
+            border: pingPong ? "1px solid #5a3800" : "1px solid #1a1a1a",
           }}
         >
           ping pong
@@ -64,8 +78,16 @@ export function DelayModule({
 
       {/* Ping pong division selector */}
       {pingPong && (
-        <div className="flex flex-col gap-0.5 w-full">
-          <span className="text-[7px] font-mono text-zinc-600 uppercase tracking-wider">
+        <div className="flex flex-col gap-1 w-full px-2">
+          <span
+            style={{
+              fontFamily: "'DM Mono', 'Courier New', monospace",
+              fontSize: "8px",
+              color: "#6e6860",
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+            }}
+          >
             division
           </span>
           <div className="flex flex-wrap gap-0.5">
@@ -73,25 +95,47 @@ export function DelayModule({
               <button
                 key={d}
                 onClick={() => onPpDivisionChange(d)}
-                className="text-[7px] font-mono px-1.5 py-0.5 rounded transition-all"
                 style={{
-                  background: ppDivision === d ? "#1a1a3a" : "#141414",
-                  color: ppDivision === d ? "#4e9eff" : "#444",
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: "8px",
+                  padding: "2px 5px",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  background: ppDivision === d ? "#1c1000" : "#080808",
+                  color: ppDivision === d ? "#f5a623" : "#4a4440",
                   border:
-                    ppDivision === d ? "1px solid #2a2a6a" : "1px solid #222",
+                    ppDivision === d
+                      ? "1px solid #5a3800"
+                      : "1px solid #1a1a1a",
                 }}
               >
                 1/{d}
               </button>
             ))}
           </div>
-          <span className="text-[8px] font-mono" style={{ color: "#556" }}>
+          <span
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: "8px",
+              color: "#6a5030",
+            }}
+          >
             {(ppDelayTime * 1000).toFixed(0)}ms @ {Math.round(bpm)} bpm
           </span>
         </div>
       )}
-      {/* Basic mode: free time knob */}
-      {!pingPong && (
+      {!pingPong &&
+        (clocked ? (
+          <span
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: "8px",
+              color: "#6a5030",
+            }}
+          >
+            {(60000 / bpm).toFixed(0)}ms @ {Math.round(bpm)} bpm
+          </span>
+        ) : (
         <Knob
           value={delayTime}
           min={0.01}
@@ -100,7 +144,7 @@ export function DelayModule({
           sublabel={`${delayTime.toFixed(2)}s`}
           onChange={onTimeChange}
         />
-      )}
+        ))}
 
       <Knob
         value={delayFb}
