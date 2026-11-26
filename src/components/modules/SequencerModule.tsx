@@ -82,7 +82,7 @@ export function SequencerModule({
             <button
               onClick={() =>
                 onScaleChange(
-                  (scaleIdx - 1 + SCALE_NAMES.length) % SCALE_NAMES.length
+                  (scaleIdx - 1 + SCALE_NAMES.length) % SCALE_NAMES.length,
                 )
               }
               style={arrowStyle}
@@ -139,7 +139,7 @@ export function SequencerModule({
           const quantized = quantizeToScale(
             note,
             SCALE_NAMES[scaleIdx],
-            rootIdx
+            rootIdx,
           )
           return (
             <div key={i} className="flex flex-col items-center gap-1">
@@ -168,7 +168,7 @@ export function SequencerModule({
                 value={note}
                 min={36}
                 max={84}
-                label={`s${i + 1}`}
+                label={`step ${i + 1}`}
                 sublabel={midiName(quantized)}
                 size={28}
                 onChange={(v) => onNoteChange(i, Math.round(v))}

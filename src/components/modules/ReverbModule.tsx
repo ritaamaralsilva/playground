@@ -24,8 +24,8 @@ export function ReverbModule({
         value={reverbSize}
         min={0.01}
         max={1}
-        label="size"
-        sublabel={`${Math.round(reverbSize * 100)}%`}
+        label="tail"
+        sublabel={`${(0.5 + reverbSize * 3.5).toFixed(1)}s`}
         onChange={onSizeChange}
       />
       <Knob

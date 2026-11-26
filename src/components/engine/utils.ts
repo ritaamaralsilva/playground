@@ -1,5 +1,10 @@
 import { SCALES } from "./constants"
 
+export function formatGainDb(gain: number): string {
+  if (gain <= 0) return "-∞ dB"
+  return `${(20 * Math.log10(gain)).toFixed(1)} dB`
+}
+
 export function midiToHz(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12)
 }
@@ -7,7 +12,7 @@ export function midiToHz(midi: number): number {
 export function quantizeToScale(
   raw: number,
   scaleName: string,
-  rootNote: number
+  rootNote: number,
 ): number {
   const intervals = SCALES[scaleName] ?? SCALES["chromatic"]
   const octave = Math.floor(raw / 12)

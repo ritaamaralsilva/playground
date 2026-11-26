@@ -32,10 +32,12 @@ export function FilterModule({
               onClick={() => onTypeChange(t)}
               className="text-[7px] font-mono uppercase px-1.5 py-0.5 rounded transition-all"
               style={{
-                background: filterType === t
-                  ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
-                  : "var(--surface-raised)",
-                color: filterType === t ? "var(--module-accent)" : "var(--muted)",
+                background:
+                  filterType === t
+                    ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
+                    : "var(--surface-raised)",
+                color:
+                  filterType === t ? "var(--module-accent)" : "var(--muted)",
                 border:
                   filterType === t
                     ? "1px solid color-mix(in srgb, var(--module-accent) 48%, var(--line))"
@@ -44,7 +46,7 @@ export function FilterModule({
             >
               {t === "lowpass" ? "LP" : t === "bandpass" ? "BP" : "HP"}
             </button>
-          )
+          ),
         )}
       </div>
       <Knob
@@ -59,8 +61,8 @@ export function FilterModule({
         value={filterRes}
         min={0.1}
         max={20}
-        label="res"
-        sublabel={filterRes.toFixed(1)}
+        label="resonance"
+        sublabel={`Q ${filterRes.toFixed(1)}`}
         onChange={onResChange}
       />
       <PortSection>

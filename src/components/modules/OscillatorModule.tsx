@@ -20,12 +20,12 @@ export function OscillatorModule({
   mkPort,
 }: OscillatorModuleProps) {
   return (
-    <ModuleFrontPanel title="osc" width={110} tone="oscillator">
+    <ModuleFrontPanel title="Oscillator" width={110} tone="oscillator">
       <Knob
         value={oscFreq}
         min={20}
         max={2000}
-        label="freq"
+        label="frequency"
         sublabel={`${Math.round(oscFreq)} Hz`}
         onChange={onFreqChange}
       />
@@ -33,7 +33,7 @@ export function OscillatorModule({
         value={oscWaveIdx}
         min={0}
         max={3}
-        label="wave"
+        label="waveform"
         sublabel={WAVEFORMS[Math.round(oscWaveIdx)]}
         onChange={(v) => onWaveChange(Math.round(v))}
       />

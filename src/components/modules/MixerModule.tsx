@@ -1,6 +1,7 @@
 import React from "react"
 import { Knob } from "../ui/Knob"
 import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
+import { formatGainDb } from "../engine/utils"
 import type { PortDef } from "../engine/types"
 
 interface MixerModuleProps {
@@ -17,7 +18,7 @@ export function MixerModule({
   mkPort,
 }: MixerModuleProps) {
   return (
-    <ModuleFrontPanel title="out" width={80} tone="output">
+    <ModuleFrontPanel title="Audio Out" width={90} tone="output">
       <div
         className="w-2.5 h-2.5 rounded-full transition-all duration-150"
         style={{
@@ -27,15 +28,16 @@ export function MixerModule({
           boxShadow: isActive
             ? "0 0 8px color-mix(in srgb, var(--module-accent) 42%, transparent)"
             : "none",
-          border: "1px solid color-mix(in srgb, var(--module-accent) 45%, var(--line))",
+          border:
+            "1px solid color-mix(in srgb, var(--module-accent) 45%, var(--line))",
         }}
       />
       <Knob
         value={masterVol}
         min={0}
         max={1}
-        label="vol"
-        sublabel={`${Math.round(masterVol * 100)}%`}
+        label="level"
+        sublabel={formatGainDb(masterVol)}
         onChange={onVolChange}
       />
       <PortSection>

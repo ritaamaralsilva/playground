@@ -33,7 +33,7 @@ export function LfoModule({
         min={0}
         max={800}
         label="depth"
-        sublabel={`${Math.round(lfoDepth)}`}
+        sublabel={`${Math.round(lfoDepth)} Hz`}
         onChange={onDepthChange}
       />
       <PortSection>

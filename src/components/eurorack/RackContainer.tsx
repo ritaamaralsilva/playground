@@ -8,7 +8,7 @@ import {
   WAVEFORMS,
   SCALE_NAMES,
 } from "../engine/constants"
-import { midiToHz, quantizeToScale } from "../engine/utils"
+import { formatGainDb, midiToHz, quantizeToScale } from "../engine/utils"
 import { ALL_PORT_DEFS } from "../engine/portDefs"
 import { Knob } from "../ui/Knob"
 import { Port } from "../ui/Port"
@@ -1073,16 +1073,16 @@ export default function RackContainer() {
   // ── MOBILE: Landscape — preset-only performance view ──────────────────────
   if (isMobile && !isPortrait) {
     // mini patch view (modules + cables) from actual patch
-    // Rack layout for auto-patch: CLK → SEQ → OSC → FILTER → VCA → REVERB → DELAY → OUT
+    // Rack layout for auto-patch: CLK → SEQ → OSCILLATOR → FILTER → VCA → REVERB → DELAY → AUDIO OUT
     const MINI_MODULES = [
       { id: "clock", label: "clock", tone: "clock" },
       { id: "seq", label: "seq", tone: "sequencer" },
-      { id: "osc", label: "osc", tone: "oscillator" },
+      { id: "osc", label: "oscillator", tone: "oscillator" },
       { id: "filter", label: "filt", tone: "filter" },
       { id: "vca", label: "vca", tone: "vca" },
       { id: "reverb", label: "rvb", tone: "reverb" },
       { id: "delay", label: "dly", tone: "delay" },
-      { id: "out", label: "out", tone: "output" },
+      { id: "out", label: "audio out", tone: "output" },
     ]
     // cable colour mapping for mini patch view (matches auto-patch cables)
     const cableColorMap: Record<string, string> = {
@@ -1120,14 +1120,21 @@ export default function RackContainer() {
     const BOX_W = 38
     const BOX_H = 24
     const GAP = 16
-    const SVG_W = MINI_MODULES.length * BOX_W + (MINI_MODULES.length - 1) * GAP
+    const boxWidths = MINI_MODULES.map((mod) =>
+      mod.id === "osc" ? 52 : mod.id === "out" ? 50 : BOX_W,
+    )
+    const SVG_W =
+      boxWidths.reduce((total, width) => total + width, 0) +
+      (boxWidths.length - 1) * GAP
     const SVG_H = 90
     const BOX_Y = 30 // y position of module boxes
     const PORT_Y = BOX_Y + BOX_H // bottom port y
     const TOP_PORT_Y = BOX_Y // top port y
 
     // Centre x of module box by index
-    const cx = (i: number) => i * (BOX_W + GAP) + BOX_W / 2
+    const cx = (i: number) =>
+      boxWidths.slice(0, i).reduce((total, width) => total + width + GAP, 0) +
+      boxWidths[i] / 2
 
     // Module index lookup
     const modIndex = (id: string) => MINI_MODULES.findIndex((m) => m.id === id)
@@ -1258,9 +1265,9 @@ export default function RackContainer() {
           {MINI_MODULES.map((mod, i) => (
             <g key={mod.id}>
               <rect
-                x={cx(i) - BOX_W / 2}
+                x={cx(i) - boxWidths[i] / 2}
                 y={BOX_Y}
-                width={BOX_W}
+                width={boxWidths[i]}
                 height={BOX_H}
                 rx={3}
                 fill={`color-mix(in srgb, var(--tone-${mod.tone}) 15%, var(--surface))`}
@@ -1303,8 +1310,8 @@ export default function RackContainer() {
           value={masterVol}
           min={0}
           max={1}
-          label="vol"
-          sublabel={`${Math.round(masterVol * 100)}%`}
+          label="level"
+          sublabel={formatGainDb(masterVol)}
           size={52}
           onChange={(v) => {
             setMasterVol(v)
