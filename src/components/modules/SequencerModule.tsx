@@ -17,6 +17,25 @@ interface SequencerModuleProps {
   mkPort: (def: PortDef) => React.ReactNode
 }
 
+const labelStyle: React.CSSProperties = {
+  fontFamily: "'DM Mono', 'Courier New', monospace",
+  fontSize: "8px",
+  color: "#6e6860",
+  letterSpacing: "0.15em",
+  textTransform: "uppercase",
+}
+
+const arrowStyle: React.CSSProperties = {
+  fontFamily: "'DM Mono', 'Courier New', monospace",
+  fontSize: "10px",
+  color: "#6e6860",
+  lineHeight: 1,
+  background: "none",
+  border: "none",
+  cursor: "pointer",
+  padding: "0 4px",
+}
+
 export function SequencerModule({
   seqStep,
   seqNotes,
@@ -28,61 +47,94 @@ export function SequencerModule({
   mkPort,
 }: SequencerModuleProps) {
   return (
-    <ModuleFrontPanel title="seq — 5 step" width={300}>
-      {/* Scale & root selectors */}
-      <div className="flex gap-1 w-full">
-        <div className="flex flex-col gap-0.5 flex-1">
-          <span className="text-[7px] font-mono text-zinc-600 uppercase tracking-wider">
+    <ModuleFrontPanel title="5 STEP SEQUENCER" width={270}>
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          width: "100%",
+          padding: "0 16px",
+          boxSizing: "border-box",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "5px",
+            marginTop: "20px",
+          }}
+        >
+          <span style={{ ...labelStyle, textAlign: "center", width: "100%" }}>
             scale
           </span>
-          <div className="flex items-center gap-1">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px",
+              width: "100%",
+            }}
+          >
             <button
               onClick={() =>
                 onScaleChange(
                   (scaleIdx - 1 + SCALE_NAMES.length) % SCALE_NAMES.length
                 )
               }
-              className="text-zinc-600 font-mono text-[10px] px-1"
-              style={{ lineHeight: 1 }}
+              style={arrowStyle}
             >
               ◀
             </button>
             <DigitalDisplay value={SCALE_NAMES[scaleIdx]} width={72} />
             <button
               onClick={() => onScaleChange((scaleIdx + 1) % SCALE_NAMES.length)}
-              className="text-zinc-600 font-mono text-[10px] px-1"
-              style={{ lineHeight: 1 }}
+              style={arrowStyle}
             >
               ▶
             </button>
           </div>
         </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[7px] font-mono text-zinc-600 uppercase tracking-wider">
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "5px",
+            marginTop: "20px",
+          }}
+        >
+          <span style={{ ...labelStyle, textAlign: "center", width: "100%" }}>
             root
           </span>
-          <div className="flex items-center gap-0.5">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px",
+            }}
+          >
             <button
               onClick={() => onRootChange((rootIdx - 1 + 12) % 12)}
-              className="text-zinc-600 font-mono text-[10px] px-0.5"
-              style={{ lineHeight: 1 }}
+              style={arrowStyle}
             >
               ◀
             </button>
             <DigitalDisplay value={ROOT_NOTES[rootIdx]} width={30} />
             <button
               onClick={() => onRootChange((rootIdx + 1) % 12)}
-              className="text-zinc-600 font-mono text-[10px] px-0.5"
-              style={{ lineHeight: 1 }}
+              style={arrowStyle}
             >
               ▶
             </button>
           </div>
         </div>
       </div>
-
-      {/* 5 step knobs */}
-      <div className="flex gap-1.5 w-full justify-center">
+      <div className="flex gap-2 justify-center">
         {seqNotes.map((note, i) => {
           const quantized = quantizeToScale(
             note,
@@ -94,9 +146,19 @@ export function SequencerModule({
               <div
                 className="w-2 h-2 rounded-full transition-all duration-75"
                 style={{
-                  background: seqStep === i ? "#f5a623" : "#1a1a1a",
-                  boxShadow: seqStep === i ? "0 0 5px #f5a623" : "none",
-                  border: "1px solid #333",
+                  width: 6,
+                  height: 6,
+                  marginTop: "24px",
+                  marginBottom: "4px",
+                  background: seqStep === i ? "#f5a623" : "#1a1510",
+                  boxShadow:
+                    seqStep === i
+                      ? "0 0 6px #f5a623, 0 0 2px #f5a623"
+                      : "none",
+                  border:
+                    seqStep === i
+                      ? "1px solid #f5a623"
+                      : "1px solid #2a2520",
                 }}
               />
               <Knob
@@ -112,7 +174,6 @@ export function SequencerModule({
           )
         })}
       </div>
-
       <PortSection>
         {mkPort({ id: "seq-clock-in", label: "clk in", type: "input" })}
         {mkPort({ id: "seq-cv-out", label: "cv out", type: "output" })}
