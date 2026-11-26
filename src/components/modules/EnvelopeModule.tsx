@@ -27,35 +27,35 @@ export function EnvelopeModule({
   mkPort,
 }: EnvelopeModuleProps) {
   return (
-    <ModuleFrontPanel title="adsr" width={130}>
+    <ModuleFrontPanel title="adsr" width={110}>
       <Knob
         value={attack}
-        min={0.01} // min attack set to 0.01s to avoid clicks
-        max={2} // 2s max attack time
+        min={0.001}
+        max={2}
         label="attack"
         sublabel={`${attack.toFixed(2)}s`}
         onChange={onAttackChange}
       />
       <Knob
         value={decay}
-        min={0.01} // min decay set to 0.01s to avoid clicks
-        max={2} // 2s max decay time
+        min={0.01}
+        max={2}
         label="decay"
         sublabel={`${decay.toFixed(2)}s`}
         onChange={onDecayChange}
       />
       <Knob
         value={sustain}
-        min={0.01} // min sustain set to 0.01s to avoid clicks
-        max={5} // 4s max sustain time
+        min={0}
+        max={5}
         label="sustain"
-        sublabel={`${sustain.toFixed(2)}s`} 
+        sublabel={`${sustain.toFixed(2)}s`}
         onChange={onSustainChange}
       />
       <Knob
         value={release}
         min={0.01} // min release set to 0.01s to avoid clicks
-        max={3} // 3s max release time
+        max={4}
         label="release"
         sublabel={`${release.toFixed(2)}s`}
         onChange={onReleaseChange}
