@@ -1,5 +1,4 @@
 import React from "react"
-import { useRef } from "react"
 import { Knob } from "../ui/Knob"
 import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
 import type { PortDef } from "../engine/types"
@@ -7,7 +6,7 @@ import type { PortDef } from "../engine/types"
 interface VcaModuleProps {
   vcaLevel: number
   onLevelChange: (v: number) => void
-  waveRef: React.RefObject<HTMLCanvasElement>
+  waveRef: React.Ref<HTMLCanvasElement>
   mkPort: (def: PortDef) => React.ReactNode
 }
 
@@ -18,7 +17,7 @@ export function VcaModule({
   mkPort,
 }: VcaModuleProps) {
   return (
-    <ModuleFrontPanel title="vca" width={130}>
+    <ModuleFrontPanel title="vca" width={110}>
       <Knob
         value={vcaLevel}
         min={0}
@@ -29,10 +28,10 @@ export function VcaModule({
       />
       <canvas
         ref={waveRef}
-        width={100}
+        width={90}
         height={28}
         className="rounded"
-        style={{ background: "#060606", border: "1px solid #1a2a1a" }}
+        style={{ background: "#050505", border: "1px solid #1e1a14" }}
       />
       <PortSection>
         {mkPort({ id: "vca-cv-in", label: "cv in", type: "input" })}
