@@ -20,7 +20,7 @@ export function OscillatorModule({
   mkPort,
 }: OscillatorModuleProps) {
   return (
-    <ModuleFrontPanel title="osc" width={130}>
+    <ModuleFrontPanel title="osc" width={110}>
       <Knob
         value={oscFreq}
         min={20}
