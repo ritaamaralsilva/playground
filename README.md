@@ -1,76 +1,153 @@
-# Web Modular Synth Playground
+# Modular Synth Playground
 
-![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Web Audio API](https://img.shields.io/badge/Web_Audio_API-FF6347?style=for-the-badge)
+**Patch. Modulate. Listen.**
 
-**Interactive modular synthesizer simulator** built as a web extension of my artist landing page ([ritasilva.online](https://www.ritasilva.online/)).  
-Patch modules, turn knobs, connect ports, and hear real-time audio in your browser.
+An interactive, Eurorack-inspired synthesizer that turns your browser into a
+small modular instrument. Connect audio and control-voltage ports, shape a
+five-step sequencer, and hear the patch through the browser's native Web Audio
+engine.
 
----
+Created by Rita Silva as a web-based companion to
+[ritasilva.online](https://ritasilva.online/).
 
-## Features
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-149eca?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss)
+![Web Audio API](https://img.shields.io/badge/Audio-Web_Audio_API-f5a623)
 
-- Fully functional **modular synth engine** with real-time audio
-- **Rack container** with interactive modules
-- **Included modules:** Clock, Sequencer, ADSR, LFO, Oscillator, Filter, VCA, Reverb, Delay, Mixer
-- **Interactive controls:** knobs, buttons, digital displays
-- Patch your own modular synth using cables directly in the browser
-- Real-time **modulation and audio synthesis**
-- UI to simulate real environment of a modular synthesizer (Eurorack)
-- Mobile-friendly responsive layout (landscape mode allows to interact with master volume and see a box like diagram of the patch being generated in the auto patch mode)
+## What you can do
 
----
+- Build a patch by connecting digital CV ports, or start with **Auto Patch**.
+- Sequence five notes and quantize them to a musical scale and root note.
+- Shape pitch, tone, and amplitude with an LFO, filter, and ADSR envelope.
+- Add convolution reverb and tempo-synced or ping-pong delay.
+- Watch the output waveform while you play.
+- Use the full rack on desktop or rotate a phone to landscape view to play with it.
 
-## Tech Stack
+## Architecture
 
-- **Frontend:** Next.js, React, Tailwind CSS
-- **Audio Engine:** Web Audio API
-- **State Management:** React hooks and modular components
+The app uses a **rack-orchestrated, patch-driven Web Audio architecture**.
+`RackContainer` is the composition root: it owns module values, the typed cable
+state, and the browser `AudioContext`. Dedicated React module components render
+controlled front panels and send user changes back through typed props and
+handlers. The rack translates the patch into Web Audio node connections.
 
----
+```mermaid
+flowchart LR
+  Page["Next.js App Router"] --> Rack["RackContainer"]
+  Rack --> Panels["Controlled module panels"]
+  Rack --> State["Module values and Cable[]"]
+  State --> Ports["Typed ports and cable model"]
+  Ports --> Graph["Patch-driven Web Audio graph"]
+  Graph --> Output["Browser audio output"]
+  Graph --> Analyser["AnalyserNode"]
+  Analyser --> Scope["VCA waveform display"]
+```
 
-## Getting Started
+### Signal flow
 
-### 1. Clone the repository
+The Auto Patch preset demonstrates the main audio path and its control
+connections. You can change the routing by repatching the ports.
 
-``bash
-git clone https://github.com/teu-username/eurorack-web-modules.git
-cd eurorack-web-modules
+```mermaid
+flowchart LR
+  Clock -- clock --> Sequencer
+  Sequencer -- CV --> Oscillator
+  Oscillator --> Filter
+  Filter --> VCA
+  Sequencer -- gate --> ADSR
+  ADSR -. envelope CV .-> VCA
+  LFO -. modulation .-> Filter
+  LFO -. modulation .-> Oscillator
+  VCA --> Reverb
+  Reverb --> Delay
+  Delay --> Output
+  Clock -. tempo sync .-> Delay
+```
 
-### 2. Install dependencies
+## Modules
 
-npm install
+| Module | What it does | Main connections |
+| --- | --- | --- |
+| **Clock** | Sets tempo and provides the timing pulse. | Clock out to sequencer clock and delay clock. |
+| **5-Step Sequencer** | Plays five editable notes, quantized by the selected scale and root. | Clock in; CV out to oscillator pitch; gate out to ADSR. |
+| **ADSR** | Shapes the amplitude envelope with attack, decay, sustain, and release controls. | Gate in; envelope out to VCA CV. |
+| **LFO** | Generates a low-frequency modulation signal with adjustable rate and depth. | Out to filter CV and/or oscillator FM. |
+| **Oscillator** | Generates sine, sawtooth, square, or triangle audio at an adjustable frequency. | V/oct and FM inputs; audio out. |
+| **Filter** | Selects low-pass, band-pass, or high-pass filtering with adjustable cutoff and resonance. | Audio in/out; CV input for modulation. |
+| **VCA** | Controls audio level and can be shaped by the ADSR envelope. Includes the waveform display. | Audio in/out; CV in. |
+| **Reverb** | Adds convolution reverb with adjustable size and wet mix. | Audio in/out. |
+| **Delay** | Adds feedback delay, with basic and ping-pong modes and clock synchronization. | Audio in/out; optional clock input. |
+| **Output** | Sets master volume and shows whether the output port is connected. | Final audio input. |
 
-or
+## Try it
 
-yarn install
+1. Select **Auto Patch** to connect a playable example and initialize browser
+   audio. Browsers require a user gesture before audio can start.
+2. Adjust the knobs, choose a filter type, or change the sequencer scale and
+   root.
+3. To build your own patch, click an unused port, then click a port of the
+   opposite type. Click a connected port to remove its cable.
+4. Select **Clear All** to disconnect the patch.
 
-### 3. Run the development server
+On mobile devices, rotate to landscape to use the rack; portrait orientation displays a prompt to rotate. Start with a comfortable device volume before raising the master level.
 
+## Run locally
+
+### Requirements
+
+- [Node.js](https://nodejs.org/) **20.9 or later**
+- npm (included with Node.js)
+- A modern browser with Web Audio API support
+
+### Clone and install
+
+```bash
+git clone https://github.com/ritaamaralsilva/playground.git
+cd playground
+npm ci
+```
+
+### Start the development server
+
+```bash
 npm run dev
+```
 
-or
+Open [http://localhost:3000](http://localhost:3000), then select **Auto
+Patch** or connect a port to enable audio. No API keys or environment
+variables are required.
 
-yarn dev
+### Build and run for production
 
-Open http://localhost:3000 to see the synth in action.
+```bash
+npm run build
+npm start
+```
 
----
+The production server is available at [http://localhost:3000](http://localhost:3000).
 
-## How to use
+### Quality checks
 
-- Connect ports (CV and audio jacks) to create your modular synth patch
-- Or simply select auto-patch to load a fully generated and working patch
-- Turn knobs to adjust parameters (frequency, filter, LFO, ADSR, etc.)
-- Play sequences, modulate signals, and listen to live audio output
-- Have fun!
+```bash
+npm run lint
+npm run build
+```
 
-## To do next:
+## Project layout
 
-- Load presets
-- Additional modules: Sampler (with audio input from user device's microphone), Granular fx, Looper, Harmonic-Oscillator, Complex-Oscillator, Low Pass Gate, Reverse Reverb, Sample and Hold, Function Generator, Noise Generator.
+```text
+src/
+├── app/                  # Next.js App Router page, layout, and global styles
+├── components/
+│   ├── eurorack/         # RackContainer: patch state and audio graph
+│   ├── modules/          # Controlled module front panels
+│   ├── ui/               # Shared knobs, ports, displays, and panel UI
+│   └── engine/           # Port and cable types, definitions, constants, helpers
+└── global.d.ts           # CSS module declaration for TypeScript
+```
 
 ## License
 
-All rights reserved by Rita Silva.
+Copyright © Rita Silva. All rights reserved.
