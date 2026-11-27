@@ -95,7 +95,7 @@ export function Knob({
 
       {/* Knob body */}
       <div
-        className="relative cursor-pointer select-none flex-shrink-0"
+        className="knob-cap relative cursor-pointer select-none flex-shrink-0"
         style={{
           width: size,
           height: size,
@@ -146,7 +146,7 @@ export function Knob({
           }}
         />
         <div
-          className="absolute rounded-full"
+          className="knob-pointer absolute rounded-full"
           style={{
             width: 2,
             height: Math.max(6, size * 0.25),
@@ -167,9 +167,9 @@ export function Knob({
         style={{
           fontFamily: "var(--font-mono)",
           fontSize: compact ? "8px" : "9px",
-          fontWeight: 500,
+          fontWeight: 600,
           letterSpacing: "0.02em",
-          color: "var(--module-accent)",
+          color: "color-mix(in srgb, var(--module-accent) 40%, var(--ink))",
           lineHeight: 1,
           textAlign: "center",
           whiteSpace: "nowrap",

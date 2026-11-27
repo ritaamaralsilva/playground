@@ -35,6 +35,7 @@ interface SequencerModuleProps {
 const labelStyle: React.CSSProperties = {
   fontFamily: "var(--font-sans)",
   fontSize: "8px",
+  fontWeight: 700,
   color: "var(--muted)",
   letterSpacing: "0.12em",
   textTransform: "uppercase",
@@ -44,7 +45,7 @@ const labelStyle: React.CSSProperties = {
 const arrowStyle: React.CSSProperties = {
   fontFamily: "var(--font-sans)",
   fontSize: "10px",
-  color: "var(--module-accent)",
+  color: "#71324c",
   lineHeight: 1,
   background: "none",
   border: "none",
@@ -367,7 +368,7 @@ export function SequencerModule({
             whiteSpace: "nowrap",
             fontFamily: "var(--font-sans)",
             fontSize: 8,
-            color: isCurrent ? "var(--module-accent)" : "var(--muted)",
+            color: isCurrent ? "#71324c" : "var(--muted)",
           }}
         >
           {index + 1}. {entry.name}
@@ -446,7 +447,7 @@ export function SequencerModule({
           padding: "0 12px",
           display: "flex",
           flexDirection: "column",
-          gap: "6px",
+          gap: "4px",
         }}
       >
         <div
@@ -540,11 +541,13 @@ export function SequencerModule({
         </div>
 
         <div
+          className="sequencer-panel-section"
           style={{
             display: "flex",
             justifyContent: "center",
-            gap: "4px",
+            gap: "3px",
             width: "100%",
+            padding: "3px 2px",
           }}
         >
           {stepRow}
@@ -796,69 +799,73 @@ export function SequencerModule({
             `${activeSequencer.currentPresetName}${activeSequencer.canDeleteLoadedPreset ? " · user" : ""}`}
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "4px",
-          }}
-        >
-          <span style={labelStyle}>song</span>
-          <button
-            type="button"
-            onClick={activeSequencer.addCurrentToSong}
-            disabled={activeSequencer.songPlayback.playing}
-            style={songButtonStyle}
+        <div className="sequencer-panel-section" style={{ padding: "4px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "4px",
+            }}
           >
-            ADD CURRENT
-          </button>
-          <button
-            type="button"
-            onClick={
-              activeSequencer.songPlayback.playing
-                ? activeSequencer.stopSong
-                : activeSequencer.startSong
-            }
-            disabled={
-              !activeSequencer.songPlayback.playing &&
-              activeSequencer.song.length === 0
-            }
-            style={songButtonStyle}
-          >
-            {activeSequencer.songPlayback.playing ? "STOP SONG" : "PLAY SONG"}
-          </button>
-        </div>
-        <div
-          aria-label="Song sequence order"
-          style={{
-            width: "100%",
-            maxHeight: 58,
-            minHeight: 25,
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "1px",
-            boxSizing: "border-box",
-            border: "1px solid var(--line)",
-            borderRadius: 3,
-            padding: "2px",
-          }}
-        >
-          {songRows.length > 0 ? (
-            songRows
-          ) : (
-            <span
-              style={{
-                padding: "5px 3px",
-                fontFamily: "var(--font-sans)",
-                fontSize: 8,
-                color: "var(--muted)",
-              }}
+            <span style={labelStyle}>song</span>
+            <button
+              type="button"
+              onClick={activeSequencer.addCurrentToSong}
+              disabled={activeSequencer.songPlayback.playing}
+              style={songButtonStyle}
             >
-              Add the current sequence to build a song.
-            </span>
-          )}
+              ADD CURRENT
+            </button>
+            <button
+              type="button"
+              onClick={
+                activeSequencer.songPlayback.playing
+                  ? activeSequencer.stopSong
+                  : activeSequencer.startSong
+              }
+              disabled={
+                !activeSequencer.songPlayback.playing &&
+                activeSequencer.song.length === 0
+              }
+              style={songButtonStyle}
+            >
+              {activeSequencer.songPlayback.playing ? "STOP SONG" : "PLAY SONG"}
+            </button>
+          </div>
+          <div
+            aria-label="Song sequence order"
+            style={{
+              width: "100%",
+              maxHeight: 58,
+              minHeight: 25,
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1px",
+              boxSizing: "border-box",
+              border: "1px solid var(--line)",
+              borderRadius: "7px 3px 8px 4px",
+              background: "rgb(255 255 255 / 48%)",
+              padding: "2px",
+              marginTop: "3px",
+            }}
+          >
+            {songRows.length > 0 ? (
+              songRows
+            ) : (
+              <span
+                style={{
+                  padding: "5px 3px",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 8,
+                  color: "var(--muted)",
+                }}
+              >
+                Add the current sequence to build a song.
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

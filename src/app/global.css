@@ -168,6 +168,9 @@ button:focus-visible {
 }
 
 .module-panel {
+  --module-panel-color: var(--module-accent);
+  --module-secondary-color: #f29cca;
+  --muted: #404b53;
   box-sizing: border-box;
   height: 488px;
   min-height: 488px;
@@ -181,66 +184,108 @@ button:focus-visible {
     ),
     radial-gradient(
       ellipse at 88% 100%,
-      color-mix(in srgb, var(--module-accent) 28%, #f29cca),
+      color-mix(
+        in srgb,
+        var(--module-panel-color) 35%,
+        var(--module-secondary-color)
+      ),
       transparent 68%
     ),
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--module-accent) 54%, #ffffff),
-      color-mix(in srgb, var(--module-accent) 28%, #dce1e4) 56%,
-      color-mix(in srgb, var(--module-accent) 22%, #929da5)
+      color-mix(in srgb, var(--module-panel-color) 54%, #ffffff),
+      color-mix(in srgb, var(--module-panel-color) 42%, #dce1e4) 56%,
+      color-mix(in srgb, var(--module-panel-color) 30%, #929da5)
     );
-  border: 1px solid color-mix(in srgb, var(--module-accent) 50%, #66727a);
+  border: 1px solid color-mix(in srgb, var(--module-accent) 60%, #30383f);
   border-radius: 3px;
   box-shadow:
-    inset 1px 0 0 rgb(255 255 255 / 74%),
-    inset -1px 0 0 rgb(32 39 45 / 12%),
     0 1px 2px rgb(0 0 0 / 22%),
-    0 2px 8px color-mix(in srgb, var(--module-accent) 20%, transparent);
+    0 2px 8px rgb(32 39 45 / 20%);
+}
+
+.module-panel::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 1px 1px 0 rgb(255 255 255 / 55%),
+    inset -1px -1px 0 rgb(0 0 0 / 35%),
+    inset 0 3px 0 color-mix(in srgb, var(--module-accent) 15%, transparent);
+}
+
+.module-panel__header,
+.module-panel__content {
+  position: relative;
+  z-index: 1;
 }
 
 .module-panel[data-tone="clock"] {
   --module-accent: var(--tone-clock);
+  --module-secondary-color: #b1b2f3;
 }
 
 .module-panel[data-tone="sequencer"] {
   --module-accent: var(--tone-sequencer);
+  --module-panel-color: #c45082;
+  --module-secondary-color: #ed95b5;
 }
 
 .module-panel[data-tone="envelope"] {
   --module-accent: var(--tone-envelope);
+  --module-panel-color: #9474ca;
+  --module-secondary-color: #e5ace5;
 }
 
 .module-panel[data-tone="lfo"] {
   --module-accent: var(--tone-lfo);
+  --module-panel-color: #398665;
+  --module-secondary-color: #9bd87d;
 }
 
 .module-panel[data-tone="oscillator"] {
   --module-accent: var(--tone-oscillator);
+  --module-panel-color: #d1776d;
+  --module-secondary-color: #f8b39e;
 }
 
 .module-panel[data-tone="filter"] {
   --module-accent: var(--tone-filter);
+  --module-panel-color: #6669bd;
+  --module-secondary-color: #a4b4f1;
 }
 
 .module-panel[data-tone="vca"] {
   --module-accent: var(--tone-vca);
+  --module-panel-color: #3a8296;
+  --module-secondary-color: #84d9e3;
 }
 
 .module-panel[data-tone="reverb"] {
   --module-accent: var(--tone-reverb);
+  --module-panel-color: #b876bd;
+  --module-secondary-color: #f0aed8;
 }
 
 .module-panel[data-tone="delay"] {
   --module-accent: var(--tone-delay);
+  --module-panel-color: #c5a447;
+  --module-secondary-color: #f2df82;
 }
 
 .module-panel[data-tone="output"] {
   --module-accent: var(--tone-output);
+  --module-panel-color: #ca819d;
+  --module-secondary-color: #f4c7e4;
 }
 
 .module-panel[data-tone="noise"] {
   --module-accent: var(--tone-noise);
+  --module-panel-color: #8d999e;
+  --module-secondary-color: #d7dce0;
 }
 
 .module-panel[data-tone="noise"] .module-panel__content {
@@ -249,10 +294,14 @@ button:focus-visible {
 
 .module-panel[data-tone="ringmod"] {
   --module-accent: var(--tone-ringmod);
+  --module-panel-color: #76609a;
+  --module-secondary-color: #b49bd0;
 }
 
 .module-panel[data-tone="samplehold"] {
   --module-accent: var(--tone-samplehold);
+  --module-panel-color: #b79179;
+  --module-secondary-color: #d9c9b3;
 }
 
 .module-panel[data-tone="samplehold"] .module-panel__content {
@@ -261,22 +310,31 @@ button:focus-visible {
 
 .module-panel[data-tone="wavefolder"] {
   --module-accent: var(--tone-wavefolder);
+  --module-panel-color: #a7545c;
+  --module-secondary-color: #e07e88;
 }
 
 .module-panel[data-tone="attenuverter"] {
   --module-accent: var(--tone-attenuverter);
+  --module-panel-color: #76b8a8;
+  --module-secondary-color: #b3ebd5;
 }
 
 .module-panel[data-tone="harmonic"] {
   --module-accent: var(--tone-harmonic);
+  --module-panel-color: #d09b5f;
+  --module-secondary-color: #efcc96;
 }
 
 .module-panel[data-tone="channelmixer"] {
   --module-accent: var(--tone-channelmixer);
+  --module-panel-color: #91a362;
+  --module-secondary-color: #d7e6a3;
 }
 
 .module-panel[data-tone="granular"] {
   --module-accent: var(--tone-granular);
+  --module-secondary-color: #c5e0f6;
   background:
     radial-gradient(
       ellipse at 18% 0%,
@@ -285,7 +343,11 @@ button:focus-visible {
     ),
     radial-gradient(
       ellipse at 88% 100%,
-      color-mix(in srgb, var(--module-accent) 24%, #d8f2ff),
+      color-mix(
+        in srgb,
+        var(--module-accent) 24%,
+        var(--module-secondary-color)
+      ),
       transparent 68%
     ),
     linear-gradient(
@@ -294,11 +356,12 @@ button:focus-visible {
       color-mix(in srgb, var(--module-accent) 24%, #e1f3fc) 56%,
       color-mix(in srgb, var(--module-accent) 18%, #afcfe0)
     );
-  border-color: color-mix(in srgb, var(--module-accent) 55%, #66727a);
 }
 
 .module-panel[data-tone="spectralphaser"] {
   --module-accent: var(--tone-spectralphaser);
+  --module-panel-color: #cf713b;
+  --module-secondary-color: #f3a761;
 }
 
 .module-panel[data-tone="spectralphaser"] .module-panel__content {
@@ -326,6 +389,7 @@ button:focus-visible {
     );
   border-top: 3px solid var(--module-accent);
   border-bottom: 1px solid color-mix(in srgb, var(--module-accent) 38%, #77828a);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
 }
 
 .module-panel__title {
@@ -350,43 +414,171 @@ button:focus-visible {
   box-sizing: border-box;
 }
 
+.sequencer-panel-section {
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--module-accent) 42%, var(--line));
+  border-radius: 12px 5px 11px 6px / 7px 11px 6px 12px;
+  background: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 78%),
+    color-mix(in srgb, var(--module-accent) 10%, var(--surface))
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 75%),
+    0 2px 4px rgb(32 39 45 / 10%);
+}
+
 .module-panel__screw {
+  --screw-rot: 35deg;
   position: absolute;
   z-index: 11;
   width: 7px;
   height: 7px;
-  border: 1px solid #4b555d;
+  border: 1px solid #30383f;
   border-radius: 50%;
-  background:
-    linear-gradient(45deg, transparent 44%, #424b52 46% 54%, transparent 56%),
-    linear-gradient(-45deg, transparent 44%, #424b52 46% 54%, transparent 56%),
-    radial-gradient(circle at 35% 30%, #f4f6f7, #7c878f 72%);
-  box-shadow: 0 1px 1px rgb(0 0 0 / 32%);
+  background: radial-gradient(
+    circle at 35% 30%,
+    #f4f6f7,
+    #89949a 55%,
+    #3b444a 100%
+  );
+  box-shadow: 0 1px 1px rgb(0 0 0 / 40%);
+}
+
+.module-panel__screw::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 1px;
+  content: "";
+  background: #30383f;
+  transform: translate(-50%, -50%) rotate(var(--screw-rot));
 }
 
 .module-panel__screw--top-left {
+  --screw-rot: 20deg;
   top: 5px;
   left: 5px;
 }
 
 .module-panel__screw--top-right {
+  --screw-rot: 110deg;
   top: 5px;
   right: 5px;
 }
 
 .module-panel__screw--bottom-left {
+  --screw-rot: 70deg;
   bottom: 5px;
   left: 5px;
 }
 
 .module-panel__screw--bottom-right {
+  --screw-rot: 150deg;
   right: 5px;
   bottom: 5px;
+}
+
+.module-panel :is(div, span, button, input, select, label) {
+  color: var(--ink) !important;
+}
+
+.module-panel * {
+  text-shadow: none !important;
+}
+
+.module-panel :is(span, button, input, select, label):not([aria-hidden="true"]),
+.module-panel div:not(:has(*)):not(:empty) {
+  opacity: 0.9 !important;
+}
+
+.module-panel div.rounded.font-mono {
+  color: #f4f6f7 !important;
+}
+
+.module-panel [data-port] {
+  position: relative;
+  background: conic-gradient(
+    from 225deg,
+    #f4f6f7,
+    #7c898f,
+    #3d484e,
+    #b9c3c6,
+    #f4f6f7
+  ) !important;
+}
+
+.module-panel [data-port]::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  border-radius: 50%;
+  box-shadow: inset 1px 1px 0 rgb(255 255 255 / 70%);
+}
+
+.module-panel [data-port] > div {
+  background: #11161a !important;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 80%) !important;
+}
+
+.knob-cap {
+  --knob-tint: var(--module-panel-color, var(--module-accent));
+  border-color: color-mix(in srgb, var(--knob-tint) 40%, #39434a) !important;
+  border-radius: 46% 54% 52% 48% / 51% 45% 55% 49% !important;
+  background:
+    radial-gradient(
+      circle at 35% 28%,
+      rgb(255 255 255 / 80%),
+      color-mix(in srgb, var(--knob-tint) 25%, transparent) 25%,
+      transparent 48%
+    ),
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--knob-tint) 50%, #aeb8bf) 0,
+      color-mix(in srgb, var(--knob-tint) 45%, #465057) 51%,
+      transparent 57%
+    ),
+    repeating-conic-gradient(
+      color-mix(in srgb, var(--knob-tint) 35%, #303a40) 0deg 1.5deg,
+      color-mix(in srgb, var(--knob-tint) 35%, #cbd4d8) 1.5deg 3deg,
+      color-mix(in srgb, var(--knob-tint) 35%, #303a40) 3deg 6deg
+    ) !important;
+  box-shadow:
+    0 2px 3px rgb(0 0 0 / 40%),
+    0 0 0 2px color-mix(in srgb, var(--module-accent) 25%, #f4e9ff),
+    inset 0 1px 1px rgb(255 255 255 / 35%) !important;
+}
+
+div:nth-child(3n + 2) > .knob-cap {
+  border-radius: 58% 42% 47% 53% / 44% 56% 46% 54% !important;
+}
+
+div:nth-child(3n + 3) > .knob-cap {
+  border-radius: 50% 50% 38% 62% / 60% 40% 55% 45% !important;
+}
+
+.knob-cap > div:first-child {
+  display: none;
+}
+
+.knob-pointer {
+  top: 6px !important;
+  box-shadow: 0 0 0 1px rgb(22 28 33 / 55%) !important;
 }
 
 .module-port-section {
   border: 1px solid color-mix(in srgb, var(--module-accent) 48%, #68737b);
   border-radius: 18px 7px 16px 8px / 10px 18px 7px 16px;
+  box-shadow:
+    0 3px 8px color-mix(in srgb, var(--module-accent) 22%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 68%),
+    inset 0 -2px 3px rgb(32 39 45 / 12%);
+}
+
+.module-port-section,
+.module-panel[data-tone="reverb"] [role="group"][aria-label^="Reverb stereo"] {
   background:
     radial-gradient(
       ellipse at 18% 0%,
@@ -395,37 +587,14 @@ button:focus-visible {
     ),
     radial-gradient(
       ellipse at 88% 100%,
-      color-mix(in srgb, var(--module-accent) 24%, #f29cca),
+      color-mix(in srgb, var(--module-secondary-color) 65%, #ffffff),
       transparent 72%
     ),
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--module-accent) 32%, #ffffff),
-      color-mix(in srgb, var(--module-accent) 18%, #c4cbd0)
-    );
-  box-shadow:
-    0 3px 8px color-mix(in srgb, var(--module-accent) 22%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 68%),
-    inset 0 -2px 3px rgb(32 39 45 / 12%);
-}
-
-.module-panel[data-tone="granular"] .module-port-section {
-  background:
-    radial-gradient(
-      ellipse at 18% 0%,
-      rgb(255 255 255 / 76%) 0 7%,
-      transparent 48%
-    ),
-    radial-gradient(
-      ellipse at 88% 100%,
-      color-mix(in srgb, var(--module-accent) 22%, #d5f1ff),
-      transparent 72%
-    ),
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--module-accent) 30%, #f6fcff),
-      color-mix(in srgb, var(--module-accent) 16%, #d9edf8)
-    );
+      color-mix(in srgb, var(--module-panel-color) 38%, #ffffff),
+      color-mix(in srgb, var(--module-panel-color) 25%, #c4cbd0)
+    ) !important;
 }
 
 .cloudy-freeze-button {
