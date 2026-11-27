@@ -485,13 +485,23 @@ export function SpectralPhaserModule({
             }}
           >
             {mkPort({
-              id: "spectral-phaser-audio-in",
-              label: "audio in",
+              id: "spectral-phaser-audio-in-l",
+              label: "L IN",
               type: "input",
             })}
             {mkPort({
-              id: "spectral-phaser-audio-out",
-              label: "audio out",
+              id: "spectral-phaser-audio-in-r",
+              label: "R IN",
+              type: "input",
+            })}
+            {mkPort({
+              id: "spectral-phaser-audio-out-l",
+              label: "L OUT",
+              type: "output",
+            })}
+            {mkPort({
+              id: "spectral-phaser-audio-out-r",
+              label: "R OUT",
               type: "output",
             })}
           </div>

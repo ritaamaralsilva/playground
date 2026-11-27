@@ -1,7 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react"
-import type { PortId, PortDef, Cable, Point, NoiseColor } from "../engine/types"
+import type {
+  PortId,
+  PortDef,
+  Cable,
+  Point,
+  NoiseColor,
+  ReverbMode,
+} from "../engine/types"
 import {
   CABLE_COLORS,
   WAVEFORM_COLOR,
@@ -130,6 +137,7 @@ export default function RackContainer() {
   const graphMuteGain = useRef<GainNode | null>(null)
   const analyser = useRef<AnalyserNode | null>(null)
   const reverbConv = useRef<ConvolverNode | null>(null)
+  const reverbPreDelayNode = useRef<DelayNode | null>(null)
   const reverbWet = useRef<GainNode | null>(null)
   const reverbDry = useRef<GainNode | null>(null)
   const reverbInput = useRef<GainNode | null>(null)
@@ -178,8 +186,19 @@ export default function RackContainer() {
   const harmonicCenterCvDepths = useRef<GainNode[]>([])
   const harmonicWidthCvDepths = useRef<GainNode[]>([])
   const channelGains = useRef<GainNode[]>([])
+  const channelPanners = useRef<StereoPannerNode[]>([])
   const channelMeterNodes = useRef<AnalyserNode[]>([])
   const channelOutput = useRef<GainNode | null>(null)
+  const channelOutputSplitter = useRef<ChannelSplitterNode | null>(null)
+  const reverbInputMerger = useRef<ChannelMergerNode | null>(null)
+  const reverbOutputSplitter = useRef<ChannelSplitterNode | null>(null)
+  const delayInputMerger = useRef<ChannelMergerNode | null>(null)
+  const delayOutputSplitter = useRef<ChannelSplitterNode | null>(null)
+  const granularInputMerger = useRef<ChannelMergerNode | null>(null)
+  const granularOutputSplitter = useRef<ChannelSplitterNode | null>(null)
+  const spectralPhaserInputMerger = useRef<ChannelMergerNode | null>(null)
+  const spectralPhaserOutputSplitter = useRef<ChannelSplitterNode | null>(null)
+  const masterInputMerger = useRef<ChannelMergerNode | null>(null)
   const granularLooper = useRef<AudioWorkletNode | null>(null)
   const spectralPhaser = useRef<AudioWorkletNode | null>(null)
   const granularParamsRef = useRef({
@@ -197,6 +216,7 @@ export default function RackContainer() {
   // ── Ping pong delay nodes ──────────────────────────────────────────────────
   const ppDelayL = useRef<DelayNode | null>(null)
   const ppDelayR = useRef<DelayNode | null>(null)
+  const ppInputSplitter = useRef<ChannelSplitterNode | null>(null)
   const ppFbL = useRef<GainNode | null>(null)
   const ppFbR = useRef<GainNode | null>(null)
   const ppMerger = useRef<ChannelMergerNode | null>(null)
@@ -253,6 +273,10 @@ export default function RackContainer() {
   const [vcaLevel, setVcaLevel] = useState(0.8)
   const [reverbSize, setReverbSize] = useState(0.5)
   const [reverbMix, setReverbMix] = useState(0.3)
+  const [reverbPreDelay, setReverbPreDelay] = useState(0.025)
+  const [reverbCharacter, setReverbCharacter] = useState(0.5)
+  const [reverbMode, setReverbMode] = useState<ReverbMode>("hall")
+  const [reverbReverse, setReverbReverse] = useState(false)
   const [delayTime, setDelayTime] = useState(0.3)
   const [delayFb, setDelayFb] = useState(0.4)
   const [delayMix, setDelayMix] = useState(0.35)
@@ -284,6 +308,9 @@ export default function RackContainer() {
   const [channelLevels, setChannelLevels] = useState([
     0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75,
   ])
+  const [channelPans, setChannelPans] = useState<number[]>(() =>
+    Array.from({ length: 8 }, () => 0),
+  )
   const [channelMeterAnalyzers, setChannelMeterAnalyzers] = useState<
     Array<AnalyserNode | null>
   >(() => Array.from({ length: 8 }, () => null))
@@ -392,18 +419,103 @@ export default function RackContainer() {
   const ppDelayTime = 60 / bpm / ppDivision
 
   // ── Build impulse response ─────────────────────────────────────────────────
-  const buildImpulse = useCallback((audioCtx: AudioContext, size: number) => {
-    const rate = audioCtx.sampleRate
-    const length = rate * (0.5 + size * 3.5)
-    const buf = audioCtx.createBuffer(2, length, rate)
-    for (let ch = 0; ch < 2; ch++) {
-      const data = buf.getChannelData(ch)
-      for (let i = 0; i < length; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 1.5 + size)
+  const buildImpulse = useCallback(
+    (
+      audioCtx: AudioContext,
+      size: number,
+      mode: ReverbMode,
+      reverse: boolean,
+      character: number,
+    ) => {
+      const rate = audioCtx.sampleRate
+      const length = Math.floor(rate * (0.5 + size * 3.5))
+      const buffer = audioCtx.createBuffer(2, length, rate)
+      const decay = {
+        room: 2.8 + size * 2,
+        hall: 1.2 + size * 1.5,
+        plate: 1.7 + size * 1.5,
+        spring: 2.4 + size * 2,
+        convolution: 1.5 + size,
+      }[mode]
+      const roomReflectionCount = 2 + Math.round(character * 5)
+      const hallCenter = new Float32Array(length)
+      if (mode === "hall") {
+        for (let i = 0; i < length; i++) {
+          hallCenter[i] = Math.random() * 2 - 1
+        }
       }
-    }
-    return buf
-  }, [])
+      const springModes = [1480, 2260, 3170, 4210].map(
+        (frequency) => frequency * (0.65 + character * 1.1),
+      )
+      const filterCutoff =
+        mode === "plate"
+          ? 1800 + character * 15000
+          : 1000 + character * 17000
+      const filterCoefficient = 1 - Math.exp((-2 * Math.PI * filterCutoff) / rate)
+
+      for (let channel = 0; channel < 2; channel++) {
+        const data = buffer.getChannelData(channel)
+        const channelOffset = channel * 0.003
+        let filteredSample = 0
+        for (let i = 0; i < length; i++) {
+          const progress = i / length
+          const envelope = Math.pow(1 - progress, decay)
+          const independentNoise = Math.random() * 2 - 1
+          let sample =
+            mode === "hall"
+              ? hallCenter[i] * (1 - character * 0.65) +
+                independentNoise * character * 0.65
+              : independentNoise
+          sample *= envelope
+
+          if (mode === "room") {
+            for (let tap = 0; tap < roomReflectionCount; tap++) {
+              const reflectionIndex = Math.floor(
+                rate *
+                  (0.009 +
+                    tap * (0.009 + character * 0.01) +
+                    channelOffset),
+              )
+              if (i === reflectionIndex) {
+                sample += (0.5 / (tap + 1)) * envelope
+              }
+            }
+          } else if (mode === "spring") {
+            const time = i / rate
+            const ringing = springModes.reduce(
+              (sum, frequency, index) =>
+                sum +
+                Math.sin(2 * Math.PI * frequency * time) / (index + 1),
+              0,
+            )
+            sample = (sample * 0.28 + ringing * 0.12) * envelope
+          } else if (mode === "plate") {
+            filteredSample +=
+              filterCoefficient * (sample - filteredSample)
+            sample = filteredSample + sample * character * 0.12
+          } else if (mode === "convolution") {
+            filteredSample +=
+              filterCoefficient * (sample - filteredSample)
+            sample = filteredSample
+          }
+
+          data[i] = sample
+        }
+
+        if (reverse) {
+          for (let i = 0; i < Math.floor(length / 2); i++) {
+            const opposite = length - 1 - i
+            const sample = data[i]
+            data[i] = data[opposite]
+            data[opposite] = sample
+          }
+        }
+      }
+
+      return buffer
+    },
+    [],
+  )
 
   // ── Audio init ─────────────────────────────────────────────────────────────
   const initAudio = useCallback(() => {
@@ -589,11 +701,19 @@ export default function RackContainer() {
     )
 
     const mixerBus = ac.createGain()
+    mixerBus.channelCount = 2
+    mixerBus.channelCountMode = "explicit"
     channelOutput.current = mixerBus
+    channelOutputSplitter.current = ac.createChannelSplitter(2)
     channelGains.current = channelLevels.map((level) => {
       const channel = ac.createGain()
       channel.gain.value = level
       return channel
+    })
+    channelPanners.current = channelPans.map((pan) => {
+      const panner = ac.createStereoPanner()
+      panner.pan.value = pan
+      return panner
     })
     channelMeterNodes.current = channelGains.current.map(() => {
       const meter = ac.createAnalyser()
@@ -603,34 +723,77 @@ export default function RackContainer() {
     setChannelMeterAnalyzers(channelMeterNodes.current)
 
     const conv = ac.createConvolver()
-    conv.buffer = buildImpulse(ac, reverbSize)
+    conv.buffer = buildImpulse(
+      ac,
+      reverbSize,
+      reverbMode,
+      reverbReverse,
+      reverbCharacter,
+    )
     reverbConv.current = conv
+    const preDelay = ac.createDelay(0.5)
+    preDelay.channelCount = 2
+    preDelay.channelCountMode = "explicit"
+    preDelay.delayTime.value = reverbPreDelay
+    reverbPreDelayNode.current = preDelay
     reverbInput.current = ac.createGain()
+    reverbInput.current.channelCount = 2
+    reverbInput.current.channelCountMode = "explicit"
     reverbOutput.current = ac.createGain()
+    reverbOutput.current.channelCount = 2
+    reverbOutput.current.channelCountMode = "explicit"
+    reverbInputMerger.current = ac.createChannelMerger(2)
+    reverbOutputSplitter.current = ac.createChannelSplitter(2)
     const rwet = ac.createGain()
+    rwet.channelCount = 2
+    rwet.channelCountMode = "explicit"
     rwet.gain.value = reverbMix
     reverbWet.current = rwet
     const rdry = ac.createGain()
+    rdry.channelCount = 2
+    rdry.channelCountMode = "explicit"
     rdry.gain.value = 1.0
     reverbDry.current = rdry
     conv.connect(rwet)
 
     const dly = ac.createDelay(4)
+    dly.channelCount = 2
+    dly.channelCountMode = "explicit"
     dly.delayTime.value = delayTime
     delayNode.current = dly
     delayInput.current = ac.createGain()
+    delayInput.current.channelCount = 2
+    delayInput.current.channelCountMode = "explicit"
     delayDry.current = ac.createGain()
+    delayDry.current.channelCount = 2
+    delayDry.current.channelCountMode = "explicit"
     delayOutput.current = ac.createGain()
+    delayOutput.current.channelCount = 2
+    delayOutput.current.channelCountMode = "explicit"
+    delayInputMerger.current = ac.createChannelMerger(2)
+    delayOutputSplitter.current = ac.createChannelSplitter(2)
     delayNormalBus.current = ac.createGain()
+    delayNormalBus.current.channelCount = 2
+    delayNormalBus.current.channelCountMode = "explicit"
     delayPingPongBus.current = ac.createGain()
+    delayPingPongBus.current.channelCount = 2
+    delayPingPongBus.current.channelCountMode = "explicit"
     delayNormalMode.current = ac.createGain()
+    delayNormalMode.current.channelCount = 2
+    delayNormalMode.current.channelCountMode = "explicit"
     delayNormalMode.current.gain.value = pingPong ? 0 : 1
     delayPingPongMode.current = ac.createGain()
+    delayPingPongMode.current.channelCount = 2
+    delayPingPongMode.current.channelCountMode = "explicit"
     delayPingPongMode.current.gain.value = pingPong ? 1 : 0
     const dfb = ac.createGain()
+    dfb.channelCount = 2
+    dfb.channelCountMode = "explicit"
     dfb.gain.value = delayFb
     delayFbGain.current = dfb
     const dwet = ac.createGain()
+    dwet.channelCount = 2
+    dwet.channelCountMode = "explicit"
     dwet.gain.value = delayMix
     delayWet.current = dwet
     dly.connect(dfb)
@@ -639,15 +802,25 @@ export default function RackContainer() {
 
     const initPpTime = 60 / bpm / ppDivision
     const pDlyL = ac.createDelay(4)
+    pDlyL.channelCount = 1
+    pDlyL.channelCountMode = "explicit"
     pDlyL.delayTime.value = initPpTime
     ppDelayL.current = pDlyL
     const pDlyR = ac.createDelay(4)
+    pDlyR.channelCount = 1
+    pDlyR.channelCountMode = "explicit"
     pDlyR.delayTime.value = initPpTime * 2
     ppDelayR.current = pDlyR
+    const ppSplitterNode = ac.createChannelSplitter(2)
+    ppInputSplitter.current = ppSplitterNode
     const pFbL = ac.createGain()
+    pFbL.channelCount = 1
+    pFbL.channelCountMode = "explicit"
     pFbL.gain.value = delayFb
     ppFbL.current = pFbL
     const pFbR = ac.createGain()
+    pFbR.channelCount = 1
+    pFbR.channelCountMode = "explicit"
     pFbR.gain.value = delayFb
     ppFbR.current = pFbR
     pDlyL.connect(pFbL)
@@ -679,13 +852,22 @@ export default function RackContainer() {
     ppDry.current = pDry
 
     const master = ac.createGain()
+    master.channelCount = 2
+    master.channelCountMode = "explicit"
     master.gain.value = masterVol
     masterGain.current = master
+    masterInputMerger.current = ac.createChannelMerger(2)
+    granularInputMerger.current = ac.createChannelMerger(2)
+    granularOutputSplitter.current = ac.createChannelSplitter(2)
+    spectralPhaserInputMerger.current = ac.createChannelMerger(2)
+    spectralPhaserOutputSplitter.current = ac.createChannelSplitter(2)
     const an = ac.createAnalyser()
     an.fftSize = 512
     analyser.current = an
     setOutputMeterAnalyser(an)
     const graphMute = ac.createGain()
+    graphMute.channelCount = 2
+    graphMute.channelCountMode = "explicit"
     graphMute.gain.value = 1
     graphMuteGain.current = graphMute
     master.connect(graphMute)
@@ -703,6 +885,8 @@ export default function RackContainer() {
             numberOfInputs: 1,
             numberOfOutputs: 1,
             outputChannelCount: [2],
+            channelCount: 2,
+            channelCountMode: "explicit",
             processorOptions: { bufferSeconds: 4 },
           })
           node.port.postMessage({
@@ -751,6 +935,7 @@ export default function RackContainer() {
     buildImpulse,
     bpm,
     channelLevels,
+    channelPans,
     delayFb,
     delayMix,
     delayTime,
@@ -775,6 +960,10 @@ export default function RackContainer() {
     pingPong,
     ppDivision,
     reverbMix,
+    reverbMode,
+    reverbPreDelay,
+    reverbCharacter,
+    reverbReverse,
     reverbSize,
     ringModLevelValue,
     spectralPhaserSettings,
@@ -804,6 +993,7 @@ export default function RackContainer() {
       const env = adsrEnvGain.current
       const vcaBus = vcaOutBus.current
       const conv = reverbConv.current
+      const revPreDelay = reverbPreDelayNode.current
       const rwet = reverbWet.current
       const rdry = reverbDry.current
       const revInput = reverbInput.current
@@ -826,6 +1016,7 @@ export default function RackContainer() {
         env,
         vcaBus,
         conv,
+        reverbPreDelayNode.current,
         rwet,
         rdry,
         revInput,
@@ -842,6 +1033,7 @@ export default function RackContainer() {
         delayPingPongMode.current,
         ppDelayL.current,
         ppDelayR.current,
+        ppInputSplitter.current,
         ppFbL.current,
         ppFbR.current,
         ppMerger.current,
@@ -878,7 +1070,18 @@ export default function RackContainer() {
         ...harmonicCenterCvDepths.current,
         ...harmonicWidthCvDepths.current,
         channelOutput.current,
+        channelOutputSplitter.current,
+        reverbInputMerger.current,
+        reverbOutputSplitter.current,
+        delayInputMerger.current,
+        delayOutputSplitter.current,
+        granularInputMerger.current,
+        granularOutputSplitter.current,
+        spectralPhaserInputMerger.current,
+        spectralPhaserOutputSplitter.current,
+        masterInputMerger.current,
         ...channelGains.current,
+        ...channelPanners.current,
         ...channelMeterNodes.current,
         granularLooper.current,
         spectralPhaser.current,
@@ -906,10 +1109,23 @@ export default function RackContainer() {
         ...harmonicWaveOscillators.current,
       ]
       const mixerBus = channelOutput.current
+      const mixerSplitter = channelOutputSplitter.current
+      const revInputMerge = reverbInputMerger.current
+      const revOutputSplit = reverbOutputSplitter.current
+      const dlyInputMerge = delayInputMerger.current
+      const dlyOutputSplit = delayOutputSplitter.current
+      const granularInputMerge = granularInputMerger.current
+      const granularOutputSplit = granularOutputSplitter.current
+      const phaserInputMerge = spectralPhaserInputMerger.current
+      const phaserOutputSplit = spectralPhaserOutputSplitter.current
+      const outputInputMerge = masterInputMerger.current
+      const granular = granularLooper.current
+      const phaser = spectralPhaser.current
       const dlyNormal = delayNormalMode.current
       const dlyPingPong = delayPingPongMode.current
       const pDlyL = ppDelayL.current
       const pDlyR = ppDelayR.current
+      const ppInput = ppInputSplitter.current
       const pFbL = ppFbL.current
       const pFbR = ppFbR.current
       const merger = ppMerger.current
@@ -927,6 +1143,7 @@ export default function RackContainer() {
         !env ||
         !vcaBus ||
         !conv ||
+        !revPreDelay ||
         !rwet ||
         !rdry ||
         !revInput ||
@@ -959,8 +1176,19 @@ export default function RackContainer() {
         !harmonicCenterCv ||
         !harmonicWidthCv ||
         !mixerBus ||
+        !mixerSplitter ||
+        !revInputMerge ||
+        !revOutputSplit ||
+        !dlyInputMerge ||
+        !dlyOutputSplit ||
+        !granularInputMerge ||
+        !granularOutputSplit ||
+        !phaserInputMerge ||
+        !phaserOutputSplit ||
+        !outputInputMerge ||
         !pDlyL ||
         !pDlyR ||
+        !ppInput ||
         !pFbL ||
         !pFbR ||
         !merger ||
@@ -1015,17 +1243,26 @@ export default function RackContainer() {
       attenOffset.connect(attenOutput)
       channelGains.current.forEach((channel, index) => {
         const meter = channelMeterNodes.current[index]
-        if (!meter) return
+        const panner = channelPanners.current[index]
+        if (!meter || !panner)
+          throw new Error(`Channel ${index + 1} stereo mixer nodes are missing.`)
         channel.connect(meter)
-        meter.connect(mixerBus)
+        channel.connect(panner)
+        panner.connect(mixerBus)
       })
+      mixerBus.connect(mixerSplitter)
 
-      revInput.connect(conv)
+      revInputMerge.connect(revInput)
+      revOutput.connect(revOutputSplit)
+      revInput.connect(revPreDelay)
+      revPreDelay.connect(conv)
       revInput.connect(rdry)
       conv.connect(rwet)
       rwet.connect(revOutput)
       rdry.connect(revOutput)
 
+      dlyInputMerge.connect(dlyInput)
+      dlyOutput.connect(dlyOutputSplit)
       dlyInput.connect(dly)
       dlyInput.connect(dlyDry)
       dly.connect(dlyFeedback)
@@ -1036,7 +1273,9 @@ export default function RackContainer() {
       dlyNormalBus.connect(dlyNormal)
       dlyNormal.connect(dlyOutput)
 
-      dlyInput.connect(pDlyL)
+      dlyInput.connect(ppInput)
+      ppInput.connect(pDlyL, 0)
+      ppInput.connect(pDlyR, 1)
       dlyInput.connect(pDry)
       pDlyL.connect(pFbL)
       pFbL.connect(pDlyR)
@@ -1053,6 +1292,15 @@ export default function RackContainer() {
       pDry.connect(dlyPingPongBus)
       dlyPingPongBus.connect(dlyPingPong)
       dlyPingPong.connect(dlyOutput)
+      outputInputMerge.connect(master)
+      if (granular) {
+        granularInputMerge.connect(granular)
+        granular.connect(granularOutputSplit)
+      }
+      if (phaser) {
+        phaserInputMerge.connect(phaser)
+        phaser.connect(phaserOutputSplit)
+      }
       dlyNormal.gain.setValueAtTime(pingPong ? 0 : 1, ac.currentTime)
       dlyPingPong.gain.setValueAtTime(pingPong ? 1 : 0, ac.currentTime)
 
@@ -1068,8 +1316,10 @@ export default function RackContainer() {
         "lfo-out": lg,
         "filter-audio-out": filt,
         "vca-out": vcaBus,
-        "reverb-audio-out": revOutput,
-        "delay-audio-out": dlyOutput,
+        "reverb-audio-out-l": revOutputSplit,
+        "reverb-audio-out-r": revOutputSplit,
+        "delay-audio-out-l": dlyOutputSplit,
+        "delay-audio-out-r": dlyOutputSplit,
         "noise-out": noise,
         "ring-audio-out": ringModLevel.current,
         "sample-cv-out": sampleSource,
@@ -1087,15 +1337,20 @@ export default function RackContainer() {
         "harmonic-triangle-out": harmonicWaveOscillators.current[0],
         "harmonic-saw-out": harmonicWaveOscillators.current[1],
         "harmonic-square-out": harmonicWaveOscillators.current[2],
-        "channel-mixer-out": mixerBus,
-        "granular-audio-out": granularLooper.current,
-        "spectral-phaser-audio-out": spectralPhaser.current,
+        "channel-mixer-out-l": mixerSplitter,
+        "channel-mixer-out-r": mixerSplitter,
+        "granular-audio-out-l": granularOutputSplit,
+        "granular-audio-out-r": granularOutputSplit,
+        "spectral-phaser-audio-out-l": phaserOutputSplit,
+        "spectral-phaser-audio-out-r": phaserOutputSplit,
       }
       const inputNodes: Partial<Record<PortId, AudioNode | null>> = {
         "filter-audio-in": filt,
         "vca-audio-in": vca,
-        "reverb-audio-in": revInput,
-        "delay-audio-in": dlyInput,
+        "reverb-audio-in-l": revInputMerge,
+        "reverb-audio-in-r": revInputMerge,
+        "delay-audio-in-l": dlyInputMerge,
+        "delay-audio-in-r": dlyInputMerge,
         "ring-audio-a-in": ring,
         "sample-cv-in": sampleAnalyser,
         "wavefolder-audio-in": folder,
@@ -1108,7 +1363,8 @@ export default function RackContainer() {
         "channel-6-in": channelGains.current[5],
         "channel-7-in": channelGains.current[6],
         "channel-8-in": channelGains.current[7],
-        "spectral-phaser-audio-in": spectralPhaser.current,
+        "spectral-phaser-audio-in-l": phaserInputMerge,
+        "spectral-phaser-audio-in-r": phaserInputMerge,
         "harmonic-v-oct-in": harmonicVoct,
         "harmonic-lin-fm-in": harmonicLinearFm,
         "harmonic-exp-fm-in": harmonicExponentialFm,
@@ -1122,8 +1378,34 @@ export default function RackContainer() {
         "harmonic-6-level-cv-in": harmonicLevelCvInputs.current[5],
         "harmonic-7-level-cv-in": harmonicLevelCvInputs.current[6],
         "harmonic-8-level-cv-in": harmonicLevelCvInputs.current[7],
-        "granular-audio-in": granularLooper.current,
-        "out-in": master,
+        "granular-audio-in-l": granularInputMerge,
+        "granular-audio-in-r": granularInputMerge,
+        "out-in-l": outputInputMerge,
+        "out-in-r": outputInputMerge,
+      }
+      const outputChannelIndices: Partial<Record<PortId, number>> = {
+        "reverb-audio-out-l": 0,
+        "reverb-audio-out-r": 1,
+        "delay-audio-out-l": 0,
+        "delay-audio-out-r": 1,
+        "channel-mixer-out-l": 0,
+        "channel-mixer-out-r": 1,
+        "granular-audio-out-l": 0,
+        "granular-audio-out-r": 1,
+        "spectral-phaser-audio-out-l": 0,
+        "spectral-phaser-audio-out-r": 1,
+      }
+      const inputChannelIndices: Partial<Record<PortId, number>> = {
+        "reverb-audio-in-l": 0,
+        "reverb-audio-in-r": 1,
+        "delay-audio-in-l": 0,
+        "delay-audio-in-r": 1,
+        "granular-audio-in-l": 0,
+        "granular-audio-in-r": 1,
+        "spectral-phaser-audio-in-l": 0,
+        "spectral-phaser-audio-in-r": 1,
+        "out-in-l": 0,
+        "out-in-r": 1,
       }
       const inputParams: Partial<Record<PortId, AudioParam | null>> = {
         "osc-fm-in": osc.frequency,
@@ -1168,8 +1450,14 @@ export default function RackContainer() {
         const source = outputNodes[cable.from]
         const destination = inputNodes[cable.to]
         const parameter = inputParams[cable.to]
-        if (source && destination) source.connect(destination)
-        else if (source && parameter) source.connect(parameter)
+        if (source && destination)
+          source.connect(
+            destination,
+            outputChannelIndices[cable.from] ?? 0,
+            inputChannelIndices[cable.to] ?? 0,
+          )
+        else if (source && parameter)
+          source.connect(parameter, outputChannelIndices[cable.from] ?? 0)
       }
     },
     [lfoDepth, pingPong],
@@ -1388,8 +1676,28 @@ export default function RackContainer() {
   }, [masterVol])
   useEffect(() => {
     if (!reverbConv.current || !ctx.current) return
-    reverbConv.current.buffer = buildImpulse(ctx.current, reverbSize)
-  }, [reverbSize, buildImpulse])
+    reverbConv.current.buffer = buildImpulse(
+      ctx.current,
+      reverbSize,
+      reverbMode,
+      reverbReverse,
+      reverbCharacter,
+    )
+  }, [
+    reverbCharacter,
+    reverbMode,
+    reverbReverse,
+    reverbSize,
+    buildImpulse,
+  ])
+  useEffect(() => {
+    if (!reverbPreDelayNode.current || !ctx.current) return
+    reverbPreDelayNode.current.delayTime.setTargetAtTime(
+      reverbPreDelay,
+      ctx.current.currentTime,
+      0.02,
+    )
+  }, [reverbPreDelay])
   useEffect(() => {
     if (!reverbWet.current || !ctx.current) return
     reverbWet.current.gain.setTargetAtTime(
@@ -1636,6 +1944,16 @@ export default function RackContainer() {
     })
   }, [channelLevels])
   useEffect(() => {
+    channelPanners.current.forEach((panner, index) => {
+      if (ctx.current && channelPans[index] !== undefined)
+        panner.pan.setTargetAtTime(
+          channelPans[index],
+          ctx.current.currentTime,
+          0.05,
+        )
+    })
+  }, [channelPans])
+  useEffect(() => {
     granularParamsRef.current = {
       position: grainPosition,
       grainSize,
@@ -1799,9 +2117,20 @@ export default function RackContainer() {
     { from: "filter-audio-out", to: "vca-audio-in", color: CABLE_COLORS[4] },
     { from: "adsr-env-out", to: "vca-cv-in", color: CABLE_COLORS[5] },
     { from: "seq-gate-out", to: "adsr-gate-in", color: CABLE_COLORS[6] },
-    { from: "vca-out", to: "reverb-audio-in", color: CABLE_COLORS[7] },
-    { from: "reverb-audio-out", to: "delay-audio-in", color: CABLE_COLORS[8] },
-    { from: "delay-audio-out", to: "out-in", color: CABLE_COLORS[9] },
+    { from: "vca-out", to: "reverb-audio-in-l", color: CABLE_COLORS[7] },
+    { from: "vca-out", to: "reverb-audio-in-r", color: CABLE_COLORS[7] },
+    {
+      from: "reverb-audio-out-l",
+      to: "delay-audio-in-l",
+      color: CABLE_COLORS[8],
+    },
+    {
+      from: "reverb-audio-out-r",
+      to: "delay-audio-in-r",
+      color: CABLE_COLORS[8],
+    },
+    { from: "delay-audio-out-l", to: "out-in-l", color: CABLE_COLORS[9] },
+    { from: "delay-audio-out-r", to: "out-in-r", color: CABLE_COLORS[9] },
   ]
 
   const doAutoPatch = useCallback(() => {
@@ -2044,9 +2373,12 @@ export default function RackContainer() {
       "filter-audio-out-vca-audio-in": CABLE_COLORS[4],
       "adsr-env-out-vca-cv-in": CABLE_COLORS[5],
       "seq-gate-out-adsr-gate-in": CABLE_COLORS[6],
-      "vca-out-reverb-audio-in": CABLE_COLORS[7],
-      "reverb-audio-out-delay-audio-in": CABLE_COLORS[8],
-      "delay-audio-out-out-in": CABLE_COLORS[9],
+      "vca-out-reverb-audio-in-l": CABLE_COLORS[7],
+      "vca-out-reverb-audio-in-r": CABLE_COLORS[7],
+      "reverb-audio-out-l-delay-audio-in-l": CABLE_COLORS[8],
+      "reverb-audio-out-r-delay-audio-in-r": CABLE_COLORS[8],
+      "delay-audio-out-l-out-in-l": CABLE_COLORS[9],
+      "delay-audio-out-r-out-in-r": CABLE_COLORS[9],
     }
     // derive cables for mini patch view from actual cables, using colour mapping above
     const miniCables = cables
@@ -2652,8 +2984,16 @@ export default function RackContainer() {
             <ReverbModule
               reverbSize={reverbSize}
               reverbMix={reverbMix}
+              reverbPreDelay={reverbPreDelay}
+              reverbCharacter={reverbCharacter}
+              reverbMode={reverbMode}
+              reverbReverse={reverbReverse}
               onSizeChange={setReverbSize}
               onMixChange={setReverbMix}
+              onPreDelayChange={setReverbPreDelay}
+              onCharacterChange={setReverbCharacter}
+              onModeChange={setReverbMode}
+              onReverseToggle={() => setReverbReverse((reverse) => !reverse)}
               mkPort={mkPort}
             />
             <DelayModule
@@ -2674,10 +3014,18 @@ export default function RackContainer() {
             />
             <ChannelMixerModule
               levels={channelLevels}
+              pans={channelPans}
               onLevelChange={(channel, level) =>
                 setChannelLevels((current) =>
                   current.map((value, index) =>
                     index === channel ? level : value,
+                  ),
+                )
+              }
+              onPanChange={(channel, pan) =>
+                setChannelPans((current) =>
+                  current.map((value, index) =>
+                    index === channel ? pan : value,
                   ),
                 )
               }
@@ -2686,7 +3034,10 @@ export default function RackContainer() {
             />
             <MixerModule
               masterVol={masterVol}
-              isActive={connectedPorts.has("out-in")}
+              isActive={
+                connectedPorts.has("out-in-l") ||
+                connectedPorts.has("out-in-r")
+              }
               analyser={outputMeterAnalyser}
               onVolChange={setMasterVol}
               mkPort={mkPort}

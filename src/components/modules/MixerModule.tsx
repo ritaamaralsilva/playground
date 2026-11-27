@@ -50,7 +50,16 @@ export function MixerModule({
         onChange={onVolChange}
       />
       <PortSection>
-        {mkPort({ id: "out-in", label: "in", type: "input" })}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "4px",
+          }}
+        >
+          {mkPort({ id: "out-in-l", label: "L IN", type: "input" })}
+          {mkPort({ id: "out-in-r", label: "R IN", type: "input" })}
+        </div>
       </PortSection>
     </ModuleFrontPanel>
   )

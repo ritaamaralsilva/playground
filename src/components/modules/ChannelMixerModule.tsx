@@ -7,7 +7,9 @@ import type { PortDef, PortId } from "../engine/types"
 
 interface ChannelMixerModuleProps {
   levels: number[]
+  pans: number[]
   onLevelChange: (channel: number, level: number) => void
+  onPanChange: (channel: number, pan: number) => void
   meters: Array<AnalyserNode | null>
   mkPort: (def: PortDef) => React.ReactNode
 }
@@ -25,7 +27,9 @@ const CHANNEL_INPUTS: Array<{ id: PortId; label: string }> = [
 
 export function ChannelMixerModule({
   levels,
+  pans,
   onLevelChange,
+  onPanChange,
   meters,
   mkPort,
 }: ChannelMixerModuleProps) {
@@ -81,25 +85,47 @@ export function ChannelMixerModule({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "5px",
+                gap: "4px",
                 width: "100%",
               }}
             >
               <AudioMeter
                 analyser={meters[index] ?? null}
                 label={`Channel ${index + 1} level`}
-                width={36}
-                height={68}
+                width={30}
+                height={52}
               />
-              <Knob
-                value={levels[index] ?? 0.75}
-                min={0}
-                max={1}
-                label="level"
-                sublabel={formatGainDb(levels[index] ?? 0.75)}
-                size={28}
-                onChange={(value) => onLevelChange(index, value)}
-              />
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <Knob
+                  value={levels[index] ?? 0.75}
+                  min={0}
+                  max={1}
+                  label="level"
+                  sublabel={formatGainDb(levels[index] ?? 0.75)}
+                  size={28}
+                  onChange={(value) => onLevelChange(index, value)}
+                />
+                <Knob
+                  value={pans[index] ?? 0}
+                  min={-1}
+                  max={1}
+                  label="pan"
+                  sublabel={
+                    Math.abs(pans[index] ?? 0) < 0.01
+                      ? "C"
+                      : `${(pans[index] ?? 0) < 0 ? "L" : "R"}${Math.round(Math.abs(pans[index] ?? 0) * 100)}`
+                  }
+                  size={16}
+                  onChange={(value) => onPanChange(index, value)}
+                />
+              </div>
             </div>
             {mkPort({
               id: input.id,
@@ -110,7 +136,16 @@ export function ChannelMixerModule({
         ))}
       </div>
       <PortSection>
-        {mkPort({ id: "channel-mixer-out", label: "mix out", type: "output" })}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "4px",
+          }}
+        >
+          {mkPort({ id: "channel-mixer-out-l", label: "L OUT", type: "output" })}
+          {mkPort({ id: "channel-mixer-out-r", label: "R OUT", type: "output" })}
+        </div>
       </PortSection>
     </ModuleFrontPanel>
   )

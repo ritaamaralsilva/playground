@@ -8,7 +8,7 @@ import type { PortDef } from "../engine/types"
  * The Clouds hardware design is licensed under CC BY-SA 3.0:
  * https://creativecommons.org/licenses/by-sa/3.0/
  * This adaptation is renamed Cloudy and uses the app's pastel styling,
- * mono audio ports, and controls implemented by its granular processor.
+ * stereo audio ports, and controls implemented by its granular processor.
  */
 interface CloudyModuleProps {
   position: number
@@ -281,13 +281,23 @@ export function CloudyModule({
           }}
         >
           {mkPort({
-            id: "granular-audio-in",
-            label: "audio in",
+            id: "granular-audio-in-l",
+            label: "L IN",
             type: "input",
           })}
           {mkPort({
-            id: "granular-audio-out",
-            label: "audio out",
+            id: "granular-audio-in-r",
+            label: "R IN",
+            type: "input",
+          })}
+          {mkPort({
+            id: "granular-audio-out-l",
+            label: "L OUT",
+            type: "output",
+          })}
+          {mkPort({
+            id: "granular-audio-out-r",
+            label: "R OUT",
             type: "output",
           })}
         </div>

@@ -206,20 +206,36 @@ export function syncGraph(
   } else if (lk("osc-out", "vca-audio-in")) {
     oscNode.connect(vcaGain)
     routeToFX(vcaGain, lk, nodes, masterGain)
-  } else if (lk("osc-out", "reverb-audio-in")) {
+  } else if (
+    lk("osc-out", "reverb-audio-in-l") ||
+    lk("osc-out", "reverb-audio-in-r")
+  ) {
     oscNode.connect(reverbConv)
     oscNode.connect(reverbDry)
-    if (lk("reverb-audio-out", "out-in")) {
+    if (
+      (lk("reverb-audio-out-l", "out-in-l") &&
+        lk("reverb-audio-out-r", "out-in-r")) ||
+      (lk("reverb-audio-out-l", "out-in-r") &&
+        lk("reverb-audio-out-r", "out-in-l"))
+    ) {
       reverbWet.connect(masterGain)
       reverbDry.connect(masterGain)
     }
-  } else if (lk("osc-out", "delay-audio-in")) {
+  } else if (
+    lk("osc-out", "delay-audio-in-l") ||
+    lk("osc-out", "delay-audio-in-r")
+  ) {
     oscNode.connect(delayNode)
-    if (lk("delay-audio-out", "out-in")) {
+    if (
+      (lk("delay-audio-out-l", "out-in-l") &&
+        lk("delay-audio-out-r", "out-in-r")) ||
+      (lk("delay-audio-out-l", "out-in-r") &&
+        lk("delay-audio-out-r", "out-in-l"))
+    ) {
       delayWet.connect(masterGain)
       oscNode.connect(masterGain)
     }
-  } else if (lk("osc-out", "out-in")) {
+  } else if (lk("osc-out", "out-in-l") || lk("osc-out", "out-in-r")) {
     oscNode.connect(masterGain)
   }
 
@@ -235,32 +251,57 @@ function routeToFX(
   const { reverbConv, reverbWet, reverbDry, delayNode, delayWet } = nodes
 
   if (
-    lk("reverb-audio-in", "vca-out") ||
-    lk("reverb-audio-in", "filter-audio-out")
+    lk("reverb-audio-in-l", "vca-out") ||
+    lk("reverb-audio-in-r", "vca-out") ||
+    lk("reverb-audio-in-l", "filter-audio-out") ||
+    lk("reverb-audio-in-r", "filter-audio-out")
   ) {
     src.connect(reverbConv)
     src.connect(reverbDry)
-    if (lk("reverb-audio-out", "delay-audio-in")) {
+    if (
+      (lk("reverb-audio-out-l", "delay-audio-in-l") &&
+        lk("reverb-audio-out-r", "delay-audio-in-r")) ||
+      (lk("reverb-audio-out-l", "delay-audio-in-r") &&
+        lk("reverb-audio-out-r", "delay-audio-in-l"))
+    ) {
       reverbWet.connect(delayNode)
       reverbDry.connect(delayNode)
       delayNode.connect(master)
       delayWet.connect(master)
-    } else if (lk("reverb-audio-out", "out-in")) {
+    } else if (
+      (lk("reverb-audio-out-l", "out-in-l") &&
+        lk("reverb-audio-out-r", "out-in-r")) ||
+      (lk("reverb-audio-out-l", "out-in-r") &&
+        lk("reverb-audio-out-r", "out-in-l"))
+    ) {
       reverbWet.connect(master)
       reverbDry.connect(master)
     }
     return
   }
   if (
-    lk("delay-audio-in", "vca-out") ||
-    lk("delay-audio-in", "filter-audio-out")
+    lk("delay-audio-in-l", "vca-out") ||
+    lk("delay-audio-in-r", "vca-out") ||
+    lk("delay-audio-in-l", "filter-audio-out") ||
+    lk("delay-audio-in-r", "filter-audio-out")
   ) {
     src.connect(delayNode)
     src.connect(master)
-    if (lk("delay-audio-out", "out-in")) delayWet.connect(master)
+    if (
+      (lk("delay-audio-out-l", "out-in-l") &&
+        lk("delay-audio-out-r", "out-in-r")) ||
+      (lk("delay-audio-out-l", "out-in-r") &&
+        lk("delay-audio-out-r", "out-in-l"))
+    )
+      delayWet.connect(master)
     return
   }
-  if (lk("vca-out", "out-in") || lk("filter-audio-out", "out-in")) {
+  if (
+    lk("vca-out", "out-in-l") ||
+    lk("vca-out", "out-in-r") ||
+    lk("filter-audio-out", "out-in-l") ||
+    lk("filter-audio-out", "out-in-r")
+  ) {
     src.connect(master)
   }
 }

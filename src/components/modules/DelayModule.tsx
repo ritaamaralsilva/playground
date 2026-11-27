@@ -176,8 +176,18 @@ export function DelayModule({
       />
       <PortSection>
         {mkPort({ id: "delay-clock-in", label: "clk in", type: "input" })}
-        {mkPort({ id: "delay-audio-in", label: "audio in", type: "input" })}
-        {mkPort({ id: "delay-audio-out", label: "audio out", type: "output" })}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "4px",
+          }}
+        >
+          {mkPort({ id: "delay-audio-in-l", label: "L IN", type: "input" })}
+          {mkPort({ id: "delay-audio-in-r", label: "R IN", type: "input" })}
+          {mkPort({ id: "delay-audio-out-l", label: "L OUT", type: "output" })}
+          {mkPort({ id: "delay-audio-out-r", label: "R OUT", type: "output" })}
+        </div>
       </PortSection>
     </ModuleFrontPanel>
   )
