@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useCallback, useState } from "react"
-import type { PortId, PortDef, Cable, Point } from "../engine/types"
+import { useEffect, useRef, useCallback, useMemo, useState } from "react"
+import type { PortId, PortDef, Cable, Point, NoiseColor } from "../engine/types"
 import {
   CABLE_COLORS,
   WAVEFORM_COLOR,
@@ -9,6 +9,10 @@ import {
   SCALE_NAMES,
 } from "../engine/constants"
 import { formatGainDb, midiToHz, quantizeToScale } from "../engine/utils"
+import {
+  createNoiseBuffer,
+  createWavefolderCurve,
+} from "../engine/audioModuleNodes"
 import { ALL_PORT_DEFS } from "../engine/portDefs"
 import { Knob } from "../ui/Knob"
 import { Port } from "../ui/Port"
@@ -22,6 +26,97 @@ import { VcaModule } from "../modules/VcaModule"
 import { ReverbModule } from "../modules/ReverbModule"
 import { DelayModule } from "../modules/DelayModule"
 import { MixerModule } from "../modules/MixerModule"
+import { NoiseModule } from "../modules/NoiseModule"
+import { RingModModule } from "../modules/RingModModule"
+import { SampleHoldModule } from "../modules/SampleHoldModule"
+import { WavefolderModule } from "../modules/WavefolderModule"
+import { AttenuverterModule } from "../modules/AttenuverterModule"
+import { HarmonicOscillatorModule } from "../modules/HarmonicOscillatorModule"
+import { ChannelMixerModule } from "../modules/ChannelMixerModule"
+import { CloudyModule } from "../modules/CloudyModule"
+import {
+  DEFAULT_SPECTRAL_PHASER_SETTINGS,
+  SpectralPhaserModule,
+} from "../modules/SpectralPhaserModule"
+import type { SpectralPhaserSettings } from "../modules/SpectralPhaserModule"
+
+const HARMONIC_MIX_HEADROOM = 0.65
+
+function harmonicLevelFor(
+  level: number,
+  index: number,
+  center: number,
+  width: number,
+  tilt: number,
+) {
+  const distance = Math.abs(index + 1 - center)
+  const sweepWeight =
+    distance >= width ? 0 : Math.cos((distance / width) * (Math.PI / 2))
+  const tiltWeight = 2 ** (tilt * (((index - 3.5) / 3.5) * 2))
+  return Math.max(0, Math.min(1, level * sweepWeight * tiltWeight))
+}
+
+function harmonicCenterCvDepthFor(
+  level: number,
+  index: number,
+  center: number,
+  width: number,
+  tilt: number,
+  depth: number,
+) {
+  const distance = index + 1 - center
+  const absoluteDistance = Math.abs(distance)
+  if (absoluteDistance >= width) return 0
+
+  const phase = (absoluteDistance / width) * (Math.PI / 2)
+  const tiltWeight = 2 ** (tilt * (((index - 3.5) / 3.5) * 2))
+  return (
+    level *
+    tiltWeight *
+    Math.sin(phase) *
+    (Math.PI / (2 * width)) *
+    Math.sign(distance) *
+    depth *
+    4
+  )
+}
+
+function harmonicWidthCvDepthFor(
+  level: number,
+  index: number,
+  center: number,
+  width: number,
+  tilt: number,
+  depth: number,
+) {
+  const distance = Math.abs(index + 1 - center)
+  if (distance >= width) return 0
+
+  const phase = (distance / width) * (Math.PI / 2)
+  const tiltWeight = 2 ** (tilt * (((index - 3.5) / 3.5) * 2))
+  return (
+    level *
+    tiltWeight *
+    Math.sin(phase) *
+    ((distance * Math.PI) / (2 * width ** 2)) *
+    depth *
+    4
+  )
+}
+
+function harmonicMixGainFor(
+  levels: number[],
+  center: number,
+  width: number,
+  tilt: number,
+) {
+  const summedLevels = levels.reduce(
+    (sum, level, index) =>
+      sum + harmonicLevelFor(level, index, center, width, tilt),
+    0,
+  )
+  return HARMONIC_MIX_HEADROOM / Math.max(1, summedLevels)
+}
 
 export default function RackContainer() {
   // ── Audio nodes ────────────────────────────────────────────────────────────
@@ -37,11 +132,67 @@ export default function RackContainer() {
   const reverbConv = useRef<ConvolverNode | null>(null)
   const reverbWet = useRef<GainNode | null>(null)
   const reverbDry = useRef<GainNode | null>(null)
+  const reverbInput = useRef<GainNode | null>(null)
+  const reverbOutput = useRef<GainNode | null>(null)
   const delayNode = useRef<DelayNode | null>(null)
   const delayFbGain = useRef<GainNode | null>(null)
   const delayWet = useRef<GainNode | null>(null)
+  const delayInput = useRef<GainNode | null>(null)
+  const delayDry = useRef<GainNode | null>(null)
+  const delayOutput = useRef<GainNode | null>(null)
+  const delayNormalBus = useRef<GainNode | null>(null)
+  const delayPingPongBus = useRef<GainNode | null>(null)
+  const delayNormalMode = useRef<GainNode | null>(null)
+  const delayPingPongMode = useRef<GainNode | null>(null)
   const adsrEnvGain = useRef<GainNode | null>(null)
   const seqCvGain = useRef<GainNode | null>(null)
+  const vcaOutBus = useRef<GainNode | null>(null)
+
+  // ── Buchla-inspired module nodes ──────────────────────────────────────────
+  const noiseSource = useRef<AudioBufferSourceNode | null>(null)
+  const noiseGain = useRef<GainNode | null>(null)
+  const ringModulator = useRef<GainNode | null>(null)
+  const ringModLevel = useRef<GainNode | null>(null)
+  const sampleHoldAnalyser = useRef<AnalyserNode | null>(null)
+  const sampleHoldSource = useRef<ConstantSourceNode | null>(null)
+  const sampleHoldSink = useRef<GainNode | null>(null)
+  const sampleHoldData = useRef(new Float32Array(2048))
+  const wavefolder = useRef<WaveShaperNode | null>(null)
+  const attenuverterInput = useRef<GainNode | null>(null)
+  const attenuverterScale = useRef<GainNode | null>(null)
+  const attenuverterOffset = useRef<ConstantSourceNode | null>(null)
+  const attenuverterOutput = useRef<GainNode | null>(null)
+  const harmonicOscillators = useRef<OscillatorNode[]>([])
+  const harmonicWaveOscillators = useRef<OscillatorNode[]>([])
+  const harmonicGains = useRef<GainNode[]>([])
+  const harmonicLevelCvInputs = useRef<GainNode[]>([])
+  const harmonicOutput = useRef<GainNode | null>(null)
+  const harmonicVoctInput = useRef<GainNode | null>(null)
+  const harmonicLinearFmInput = useRef<GainNode | null>(null)
+  const harmonicExponentialFmInput = useRef<GainNode | null>(null)
+  const harmonicCenterCvInput = useRef<GainNode | null>(null)
+  const harmonicWidthCvInput = useRef<GainNode | null>(null)
+  const harmonicVoctDepths = useRef<GainNode[]>([])
+  const harmonicLinearFmDepths = useRef<GainNode[]>([])
+  const harmonicExponentialFmDepths = useRef<GainNode[]>([])
+  const harmonicCenterCvDepths = useRef<GainNode[]>([])
+  const harmonicWidthCvDepths = useRef<GainNode[]>([])
+  const channelGains = useRef<GainNode[]>([])
+  const channelMeterNodes = useRef<AnalyserNode[]>([])
+  const channelOutput = useRef<GainNode | null>(null)
+  const granularLooper = useRef<AudioWorkletNode | null>(null)
+  const spectralPhaser = useRef<AudioWorkletNode | null>(null)
+  const granularParamsRef = useRef({
+    position: 0.65,
+    grainSize: 0.15,
+    pitch: 0,
+    inputGain: 1,
+    density: 8,
+    texture: 0.5,
+    feedback: 0.2,
+    mix: 0.5,
+    frozen: false,
+  })
 
   // ── Ping pong delay nodes ──────────────────────────────────────────────────
   const ppDelayL = useRef<DelayNode | null>(null)
@@ -49,6 +200,9 @@ export default function RackContainer() {
   const ppFbL = useRef<GainNode | null>(null)
   const ppFbR = useRef<GainNode | null>(null)
   const ppMerger = useRef<ChannelMergerNode | null>(null)
+  const ppSplitter = useRef<ChannelSplitterNode | null>(null)
+  const ppPanL = useRef<StereoPannerNode | null>(null)
+  const ppPanR = useRef<StereoPannerNode | null>(null)
   const ppWet = useRef<GainNode | null>(null)
   const ppDry = useRef<GainNode | null>(null)
 
@@ -69,6 +223,7 @@ export default function RackContainer() {
 
   // ── Patch state ────────────────────────────────────────────────────────────
   const [cables, setCables] = useState<Cable[]>([])
+  const cablesRef = useRef<Cable[]>([])
   const [dragging, setDragging] = useState<{
     portId: PortId
     color: string
@@ -104,7 +259,65 @@ export default function RackContainer() {
   const [pingPong, setPingPong] = useState(false)
   const [ppDivision, setPpDivision] = useState(4)
   const [masterVol, setMasterVol] = useState(0.6)
+  const [noiseColor, setNoiseColor] = useState<NoiseColor>("white")
+  const [noiseLevel, setNoiseLevel] = useState(0.7)
+  const [ringModLevelValue, setRingModLevelValue] = useState(0.7)
+  const [sampleHoldInputGain, setSampleHoldInputGain] = useState(1)
+  const [sampleHoldOffset, setSampleHoldOffset] = useState(0)
+  const [sampleHoldSlew, setSampleHoldSlew] = useState(0.01)
+  const [wavefolderFold, setWavefolderFold] = useState(1.4)
+  const [wavefolderBias, setWavefolderBias] = useState(0)
+  const [attenuverterAmount, setAttenuverterAmount] = useState(0.5)
+  const [attenuverterOffsetValue, setAttenuverterOffsetValue] = useState(0)
+  const [harmonicFrequency, setHarmonicFrequency] = useState(110)
+  const [harmonicLevels, setHarmonicLevels] = useState([
+    0.85, 0.58, 0.42, 0.32, 0.25, 0.2, 0.16, 0.13,
+  ])
+  const [harmonicCenter, setHarmonicCenter] = useState(4.5)
+  const [harmonicWidth, setHarmonicWidth] = useState(4)
+  const [harmonicTilt, setHarmonicTilt] = useState(0)
+  const [harmonicLinearFmDepth, setHarmonicLinearFmDepth] = useState(0)
+  const [harmonicExponentialFmAmount, setHarmonicExponentialFmAmount] =
+    useState(0)
+  const [harmonicCenterCvDepth, setHarmonicCenterCvDepth] = useState(0)
+  const [harmonicWidthCvDepth, setHarmonicWidthCvDepth] = useState(0)
+  const [channelLevels, setChannelLevels] = useState([
+    0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75,
+  ])
+  const [channelMeterAnalyzers, setChannelMeterAnalyzers] = useState<
+    Array<AnalyserNode | null>
+  >(() => Array.from({ length: 8 }, () => null))
+  const [outputMeterAnalyser, setOutputMeterAnalyser] =
+    useState<AnalyserNode | null>(null)
+  const [grainPosition, setGrainPosition] = useState(0.65)
+  const [grainSize, setGrainSize] = useState(0.15)
+  const [grainPitch, setGrainPitch] = useState(0)
+  const [grainInputGain, setGrainInputGain] = useState(1)
+  const [grainDensity, setGrainDensity] = useState(8)
+  const [grainTexture, setGrainTexture] = useState(0.5)
+  const [grainFeedback, setGrainFeedback] = useState(0.2)
+  const [grainMix, setGrainMix] = useState(0.5)
+  const [granularFrozen, setGranularFrozen] = useState(false)
+  const [granularReady, setGranularReady] = useState(false)
+  const [spectralPhaserSettings, setSpectralPhaserSettings] =
+    useState<SpectralPhaserSettings>(DEFAULT_SPECTRAL_PHASER_SETTINGS)
+  const [spectralPhaserReady, setSpectralPhaserReady] = useState(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
+  const [patchError, setPatchError] = useState<string | null>(null)
+  const updateSpectralPhaserSettings = useCallback(
+    (patch: Partial<SpectralPhaserSettings>) =>
+      setSpectralPhaserSettings((current) => ({ ...current, ...patch })),
+    [],
+  )
 
+  const noiseColorRef = useRef(noiseColor)
+  const noiseLevelRef = useRef(noiseLevel)
+  const ringModLevelRef = useRef(ringModLevelValue)
+  const sampleHoldInputGainRef = useRef(sampleHoldInputGain)
+  const sampleHoldOffsetRef = useRef(sampleHoldOffset)
+  const sampleHoldSlewRef = useRef(sampleHoldSlew)
+  const attenuverterAmountRef = useRef(attenuverterAmount)
+  const attenuverterOffsetRef = useRef(attenuverterOffsetValue)
   // ── ADSR value refs ────────────────────────────────────────────────────────
   const attackRef = useRef(attack)
   const decayRef = useRef(decay)
@@ -123,15 +336,13 @@ export default function RackContainer() {
   // ── Mobile / orientation detection ────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(false)
   const [isPortrait, setIsPortrait] = useState(false)
+  const [mobileShowFullRack, setMobileShowFullRack] = useState(true)
   const [mobilePatchReady, setMobilePatchReady] = useState(false)
-  const [fitScale, setFitScale] = useState(1)
   const [fitSize, setFitSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     const check = () => {
-      setIsMobile(
-        window.innerWidth < 1024 && window.innerHeight > window.innerWidth,
-      )
+      setIsMobile(window.innerWidth < 1024)
       setIsPortrait(window.innerHeight > window.innerWidth)
     }
     const onOrientationChange = () => window.setTimeout(check, 100)
@@ -152,34 +363,31 @@ export default function RackContainer() {
       const width = content.offsetWidth
       const height = content.offsetHeight
       if (!width || !height) return
-
-      const scale = Math.min(
-        1,
-        (window.innerWidth - 24) / width,
-        (window.innerHeight - 24) / height,
-      )
       setFitSize({ width, height })
-      setFitScale(Math.max(scale, 0.1))
     }
 
     const observer = new ResizeObserver(updateFit)
     observer.observe(content)
-    window.addEventListener("resize", updateFit)
     updateFit()
     return () => {
       observer.disconnect()
-      window.removeEventListener("resize", updateFit)
     }
-  }, [])
+  }, [isMobile, isPortrait])
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const cableMap = cables.reduce<Partial<Record<PortId, PortId>>>((acc, c) => {
-    acc[c.from] = c.to
-    acc[c.to] = c.from
-    return acc
-  }, {})
-  const linked = (a: PortId, b: PortId) =>
-    cableMap[a] === b || cableMap[b] === a
+  const cableMap = useMemo(
+    () =>
+      cables.reduce<Partial<Record<PortId, PortId>>>((acc, cable) => {
+        acc[cable.from] = cable.to
+        acc[cable.to] = cable.from
+        return acc
+      }, {}),
+    [cables],
+  )
+  const linked = useCallback(
+    (a: PortId, b: PortId) => cableMap[a] === b || cableMap[b] === a,
+    [cableMap],
+  )
   const connectedPorts = new Set<PortId>(cables.flatMap((c) => [c.from, c.to]))
   const ppDelayTime = 60 / bpm / ppDivision
 
@@ -231,16 +439,174 @@ export default function RackContainer() {
     filterNode.current = filt
 
     const vca = ac.createGain()
-    vca.gain.value = vcaLevelRef.current
+    vca.gain.value = vcaLevel
     vcaGain.current = vca
 
     const envG = ac.createGain()
-    envG.gain.value = 0
+    envG.gain.value = 1
     adsrEnvGain.current = envG
+    const vcaBus = ac.createGain()
+    vcaOutBus.current = vcaBus
+
+    const noise = ac.createBufferSource()
+    noise.buffer = createNoiseBuffer(ac, noiseColor)
+    noise.loop = true
+    noise.start()
+    noiseSource.current = noise
+    const noiseLevelNode = ac.createGain()
+    noiseLevelNode.gain.value = noiseLevel
+    noiseGain.current = noiseLevelNode
+
+    const ring = ac.createGain()
+    ring.gain.value = 0
+    ringModulator.current = ring
+    const ringLevelNode = ac.createGain()
+    ringLevelNode.gain.value = ringModLevelValue
+    ringModLevel.current = ringLevelNode
+
+    const sampleAnalyser = ac.createAnalyser()
+    sampleAnalyser.fftSize = sampleHoldData.current.length
+    sampleHoldAnalyser.current = sampleAnalyser
+    const heldCv = ac.createConstantSource()
+    heldCv.offset.value = 0
+    heldCv.start()
+    sampleHoldSource.current = heldCv
+    const sampleSink = ac.createGain()
+    sampleSink.gain.value = 0
+    sampleHoldSink.current = sampleSink
+
+    const folder = ac.createWaveShaper()
+    folder.curve = createWavefolderCurve(wavefolderFold, wavefolderBias)
+    folder.oversample = "4x"
+    wavefolder.current = folder
+
+    const attenInput = ac.createGain()
+    attenuverterInput.current = attenInput
+    const attenScale = ac.createGain()
+    attenScale.gain.value = attenuverterAmount
+    attenuverterScale.current = attenScale
+    const attenOffset = ac.createConstantSource()
+    attenOffset.offset.value = attenuverterOffsetValue
+    attenOffset.start()
+    attenuverterOffset.current = attenOffset
+    const attenOutput = ac.createGain()
+    attenuverterOutput.current = attenOutput
+
+    const harmonicBus = ac.createGain()
+    harmonicBus.gain.value = harmonicMixGainFor(
+      harmonicLevels,
+      harmonicCenter,
+      harmonicWidth,
+      harmonicTilt,
+    )
+    harmonicOutput.current = harmonicBus
+    harmonicOscillators.current = []
+    harmonicGains.current = []
+    for (let partial = 1; partial <= 8; partial++) {
+      const partialOscillator = ac.createOscillator()
+      partialOscillator.type = "sine"
+      partialOscillator.frequency.value = harmonicFrequency * partial
+      partialOscillator.start()
+      const partialGain = ac.createGain()
+      partialGain.gain.value = harmonicLevelFor(
+        harmonicLevels[partial - 1],
+        partial - 1,
+        harmonicCenter,
+        harmonicWidth,
+        harmonicTilt,
+      )
+      harmonicOscillators.current.push(partialOscillator)
+      harmonicGains.current.push(partialGain)
+    }
+    harmonicLevelCvInputs.current = harmonicOscillators.current.map(() =>
+      ac.createGain(),
+    )
+    harmonicWaveOscillators.current = (
+      ["triangle", "sawtooth", "square"] as OscillatorType[]
+    ).map((waveform) => {
+      const oscillator = ac.createOscillator()
+      oscillator.type = waveform
+      oscillator.frequency.value = harmonicFrequency
+      oscillator.start()
+      return oscillator
+    })
+    harmonicVoctInput.current = ac.createGain()
+    harmonicLinearFmInput.current = ac.createGain()
+    harmonicExponentialFmInput.current = ac.createGain()
+    harmonicCenterCvInput.current = ac.createGain()
+    harmonicWidthCvInput.current = ac.createGain()
+    const harmonicOscillatorsForFm = [
+      ...harmonicOscillators.current,
+      ...harmonicWaveOscillators.current,
+    ]
+    harmonicVoctDepths.current = harmonicOscillatorsForFm.map(() => {
+      const depth = ac.createGain()
+      depth.gain.value = 1200
+      return depth
+    })
+    harmonicLinearFmDepths.current = harmonicOscillatorsForFm.map(
+      (_, index) => {
+        const depth = ac.createGain()
+        depth.gain.value =
+          harmonicFrequency *
+          harmonicLinearFmDepth *
+          (index < 8 ? index + 1 : 1)
+        return depth
+      },
+    )
+    harmonicExponentialFmDepths.current = harmonicOscillatorsForFm.map(() => {
+      const depth = ac.createGain()
+      depth.gain.value = harmonicExponentialFmAmount * 1200
+      return depth
+    })
+    harmonicCenterCvDepths.current = harmonicOscillators.current.map(
+      (_, index) => {
+        const depth = ac.createGain()
+        depth.gain.value = harmonicCenterCvDepthFor(
+          harmonicLevels[index],
+          index,
+          harmonicCenter,
+          harmonicWidth,
+          harmonicTilt,
+          harmonicCenterCvDepth,
+        )
+        return depth
+      },
+    )
+    harmonicWidthCvDepths.current = harmonicOscillators.current.map(
+      (_, index) => {
+        const depth = ac.createGain()
+        depth.gain.value = harmonicWidthCvDepthFor(
+          harmonicLevels[index],
+          index,
+          harmonicCenter,
+          harmonicWidth,
+          harmonicTilt,
+          harmonicWidthCvDepth,
+        )
+        return depth
+      },
+    )
+
+    const mixerBus = ac.createGain()
+    channelOutput.current = mixerBus
+    channelGains.current = channelLevels.map((level) => {
+      const channel = ac.createGain()
+      channel.gain.value = level
+      return channel
+    })
+    channelMeterNodes.current = channelGains.current.map(() => {
+      const meter = ac.createAnalyser()
+      meter.fftSize = 256
+      return meter
+    })
+    setChannelMeterAnalyzers(channelMeterNodes.current)
 
     const conv = ac.createConvolver()
     conv.buffer = buildImpulse(ac, reverbSize)
     reverbConv.current = conv
+    reverbInput.current = ac.createGain()
+    reverbOutput.current = ac.createGain()
     const rwet = ac.createGain()
     rwet.gain.value = reverbMix
     reverbWet.current = rwet
@@ -252,6 +618,15 @@ export default function RackContainer() {
     const dly = ac.createDelay(4)
     dly.delayTime.value = delayTime
     delayNode.current = dly
+    delayInput.current = ac.createGain()
+    delayDry.current = ac.createGain()
+    delayOutput.current = ac.createGain()
+    delayNormalBus.current = ac.createGain()
+    delayPingPongBus.current = ac.createGain()
+    delayNormalMode.current = ac.createGain()
+    delayNormalMode.current.gain.value = pingPong ? 0 : 1
+    delayPingPongMode.current = ac.createGain()
+    delayPingPongMode.current.gain.value = pingPong ? 1 : 0
     const dfb = ac.createGain()
     dfb.gain.value = delayFb
     delayFbGain.current = dfb
@@ -285,9 +660,12 @@ export default function RackContainer() {
     pDlyR.connect(merger, 0, 1)
     const panL = ac.createStereoPanner()
     panL.pan.value = -1
+    ppPanL.current = panL
     const panR = ac.createStereoPanner()
     panR.pan.value = 1
+    ppPanR.current = panR
     const splitter = ac.createChannelSplitter(2)
+    ppSplitter.current = splitter
     merger.connect(splitter)
     splitter.connect(panL, 0)
     splitter.connect(panR, 1)
@@ -306,13 +684,106 @@ export default function RackContainer() {
     const an = ac.createAnalyser()
     an.fftSize = 512
     analyser.current = an
+    setOutputMeterAnalyser(an)
     const graphMute = ac.createGain()
     graphMute.gain.value = 1
     graphMuteGain.current = graphMute
     master.connect(graphMute)
     graphMute.connect(ac.destination)
     graphMute.connect(an)
-  }, []) // eslint-disable-line
+
+    if (!ac.audioWorklet || typeof AudioWorkletNode === "undefined") {
+      setAudioError("Cloudy and Spectral Phaser require AudioWorklet support.")
+    } else {
+      void ac.audioWorklet
+        .addModule("/worklets/granular-looper.js")
+        .then(() => {
+          if (ctx.current !== ac) return
+          const node = new AudioWorkletNode(ac, "granular-looper", {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            processorOptions: { bufferSeconds: 4 },
+          })
+          node.port.postMessage({
+            type: "params",
+            values: granularParamsRef.current,
+          })
+          granularLooper.current = node
+          setGranularReady(true)
+        })
+        .catch((error: unknown) => {
+          const detail =
+            error instanceof Error ? ` ${error.message}` : " Unknown error."
+          console.error("Could not initialize Cloudy.", error)
+          setAudioError(`Cloudy unavailable.${detail}`)
+        })
+      void ac.audioWorklet
+        .addModule("/worklets/spectral-phaser.js")
+        .then(() => {
+          if (ctx.current !== ac) return
+          const node = new AudioWorkletNode(ac, "spectral-phaser", {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            channelCount: 2,
+            channelCountMode: "explicit",
+          })
+          const initialParameters: Record<string, number> = {
+            ...spectralPhaserSettings,
+            sync: spectralPhaserSettings.sync ? 1 : 0,
+            bpm,
+          }
+          for (const [name, value] of Object.entries(initialParameters)) {
+            node.parameters.get(name)?.setValueAtTime(value, ac.currentTime)
+          }
+          spectralPhaser.current = node
+          setSpectralPhaserReady(true)
+        })
+        .catch((error: unknown) => {
+          const detail =
+            error instanceof Error ? ` ${error.message}` : " Unknown error."
+          console.error("Could not initialize Spectral Phaser.", error)
+          setAudioError(`Spectral Phaser unavailable.${detail}`)
+        })
+    }
+  }, [
+    buildImpulse,
+    bpm,
+    channelLevels,
+    delayFb,
+    delayMix,
+    delayTime,
+    filterCutoff,
+    filterRes,
+    filterType,
+    harmonicCenter,
+    harmonicCenterCvDepth,
+    harmonicExponentialFmAmount,
+    harmonicFrequency,
+    harmonicLevels,
+    harmonicLinearFmDepth,
+    harmonicTilt,
+    harmonicWidth,
+    harmonicWidthCvDepth,
+    lfoRate,
+    masterVol,
+    noiseColor,
+    noiseLevel,
+    oscFreq,
+    oscWaveIdx,
+    pingPong,
+    ppDivision,
+    reverbMix,
+    reverbSize,
+    ringModLevelValue,
+    spectralPhaserSettings,
+    vcaLevel,
+    wavefolderFold,
+    wavefolderBias,
+    attenuverterAmount,
+    attenuverterOffsetValue,
+  ])
 
   // ── Sync audio graph ───────────────────────────────────────────────────────
   const rebuildAudioGraph = useCallback(
@@ -326,141 +797,379 @@ export default function RackContainer() {
       }, {})
       const lk = (a: PortId, b: PortId) => map[a] === b || map[b] === a
 
-      const nodes = [
-        oscNode,
-        lfoGain,
-        seqCvGain,
-        filterNode,
-        vcaGain,
-        adsrEnvGain,
-        reverbConv,
-        reverbWet,
-        reverbDry,
-        delayWet,
-        ppWet,
-        ppDry,
-        ppMerger,
-      ]
-      nodes.forEach((r) => {
-        try {
-          r.current?.disconnect()
-        } catch {}
-      })
-
-      if (reverbConv.current && reverbWet.current)
-        reverbConv.current.connect(reverbWet.current)
-
-      const pDlyL = ppDelayL.current
-      const pDlyR = ppDelayR.current
-      const pFbL = ppFbL.current
-      const pFbR = ppFbR.current
-      const merger = ppMerger.current
-      const pWet = ppWet.current
-      const pDry = ppDry.current
-      if (pDlyL && pDlyR && pFbL && pFbR && merger && pWet && pDry) {
-        pDlyL.connect(pFbL)
-        pFbL.connect(pDlyR)
-        pDlyR.connect(pFbR)
-        pFbR.connect(pDlyL)
-        pDlyL.connect(merger, 0, 0)
-        pDlyR.connect(merger, 0, 1)
-        merger.connect(pWet)
-      }
-
       const osc = oscNode.current
       const lg = lfoGain.current
       const filt = filterNode.current
       const vca = vcaGain.current
       const env = adsrEnvGain.current
+      const vcaBus = vcaOutBus.current
       const conv = reverbConv.current
       const rwet = reverbWet.current
       const rdry = reverbDry.current
+      const revInput = reverbInput.current
+      const revOutput = reverbOutput.current
       const dly = delayNode.current
       const dwet = delayWet.current
+      const dlyInput = delayInput.current
+      const dlyDry = delayDry.current
+      const dlyOutput = delayOutput.current
+      const dlyNormalBus = delayNormalBus.current
+      const dlyPingPongBus = delayPingPongBus.current
       const master = masterGain.current
-      if (!osc || !lg || !filt || !vca || !env || !master) return
+      const graphMute = graphMuteGain.current
+      const nodes: Array<AudioNode | null> = [
+        osc,
+        lfoGain.current,
+        seqCvGain.current,
+        filt,
+        vca,
+        env,
+        vcaBus,
+        conv,
+        rwet,
+        rdry,
+        revInput,
+        revOutput,
+        dly,
+        delayFbGain.current,
+        dwet,
+        dlyInput,
+        dlyDry,
+        dlyOutput,
+        dlyNormalBus,
+        dlyPingPongBus,
+        delayNormalMode.current,
+        delayPingPongMode.current,
+        ppDelayL.current,
+        ppDelayR.current,
+        ppFbL.current,
+        ppFbR.current,
+        ppMerger.current,
+        ppSplitter.current,
+        ppPanL.current,
+        ppPanR.current,
+        ppWet.current,
+        ppDry.current,
+        noiseSource.current,
+        noiseGain.current,
+        ringModulator.current,
+        ringModLevel.current,
+        sampleHoldAnalyser.current,
+        sampleHoldSource.current,
+        sampleHoldSink.current,
+        wavefolder.current,
+        attenuverterInput.current,
+        attenuverterScale.current,
+        attenuverterOffset.current,
+        attenuverterOutput.current,
+        harmonicOutput.current,
+        harmonicVoctInput.current,
+        harmonicLinearFmInput.current,
+        harmonicExponentialFmInput.current,
+        harmonicCenterCvInput.current,
+        harmonicWidthCvInput.current,
+        ...harmonicOscillators.current,
+        ...harmonicWaveOscillators.current,
+        ...harmonicGains.current,
+        ...harmonicLevelCvInputs.current,
+        ...harmonicVoctDepths.current,
+        ...harmonicLinearFmDepths.current,
+        ...harmonicExponentialFmDepths.current,
+        ...harmonicCenterCvDepths.current,
+        ...harmonicWidthCvDepths.current,
+        channelOutput.current,
+        ...channelGains.current,
+        ...channelMeterNodes.current,
+        granularLooper.current,
+        spectralPhaser.current,
+      ]
+      nodes.forEach((node) => node?.disconnect())
 
-      if (lk("lfo-out", "filter-cv-in")) lg.connect(filt.frequency)
-      if (lk("lfo-out", "osc-fm-in")) lg.connect(osc.frequency)
-      lg.gain.setTargetAtTime(
-        lk("lfo-out", "osc-fm-in") || lk("lfo-out", "filter-cv-in")
-          ? lfoDepth
-          : 0,
-        ac.currentTime,
-        0.05,
+      const noise = noiseGain.current
+      const ring = ringModulator.current
+      const sampleAnalyser = sampleHoldAnalyser.current
+      const sampleSource = sampleHoldSource.current
+      const sampleSink = sampleHoldSink.current
+      const folder = wavefolder.current
+      const attenInput = attenuverterInput.current
+      const attenScale = attenuverterScale.current
+      const attenOffset = attenuverterOffset.current
+      const attenOutput = attenuverterOutput.current
+      const harmonicBus = harmonicOutput.current
+      const harmonicVoct = harmonicVoctInput.current
+      const harmonicLinearFm = harmonicLinearFmInput.current
+      const harmonicExponentialFm = harmonicExponentialFmInput.current
+      const harmonicCenterCv = harmonicCenterCvInput.current
+      const harmonicWidthCv = harmonicWidthCvInput.current
+      const harmonicSources = [
+        ...harmonicOscillators.current,
+        ...harmonicWaveOscillators.current,
+      ]
+      const mixerBus = channelOutput.current
+      const dlyNormal = delayNormalMode.current
+      const dlyPingPong = delayPingPongMode.current
+      const pDlyL = ppDelayL.current
+      const pDlyR = ppDelayR.current
+      const pFbL = ppFbL.current
+      const pFbR = ppFbR.current
+      const merger = ppMerger.current
+      const splitter = ppSplitter.current
+      const panL = ppPanL.current
+      const panR = ppPanR.current
+      const pWet = ppWet.current
+      const pDry = ppDry.current
+      const dlyFeedback = delayFbGain.current
+      if (
+        !osc ||
+        !lg ||
+        !filt ||
+        !vca ||
+        !env ||
+        !vcaBus ||
+        !conv ||
+        !rwet ||
+        !rdry ||
+        !revInput ||
+        !revOutput ||
+        !dly ||
+        !dwet ||
+        !dlyInput ||
+        !dlyDry ||
+        !dlyOutput ||
+        !dlyNormalBus ||
+        !dlyPingPongBus ||
+        !dlyNormal ||
+        !dlyPingPong ||
+        !dlyFeedback ||
+        !master ||
+        !noise ||
+        !ring ||
+        !sampleAnalyser ||
+        !sampleSource ||
+        !sampleSink ||
+        !folder ||
+        !attenInput ||
+        !attenScale ||
+        !attenOffset ||
+        !attenOutput ||
+        !harmonicBus ||
+        !harmonicVoct ||
+        !harmonicLinearFm ||
+        !harmonicExponentialFm ||
+        !harmonicCenterCv ||
+        !harmonicWidthCv ||
+        !mixerBus ||
+        !pDlyL ||
+        !pDlyR ||
+        !pFbL ||
+        !pFbR ||
+        !merger ||
+        !splitter ||
+        !panL ||
+        !panR ||
+        !pWet ||
+        !pDry ||
+        !ringModLevel.current ||
+        !graphMute
       )
+        return
 
-      if (lk("osc-out", "filter-audio-in")) {
-        osc.connect(filt)
-        let sig: AudioNode = filt
-        if (lk("filter-audio-out", "vca-audio-in")) {
-          filt.connect(vca)
-          if (lk("adsr-env-out", "vca-cv-in")) {
-            vca.connect(env)
-            sig = env
-          } else {
-            sig = vca
-          }
-        }
-        routeToFX(
-          sig,
-          lk,
-          conv,
-          rwet,
-          rdry,
-          dly,
-          dwet,
-          pDlyL,
-          pDlyR,
-          pWet,
-          pDry,
-          master,
-          pingPong,
+      lfoNode.current?.connect(lg)
+      noiseSource.current?.connect(noise)
+      ring.connect(ringModLevel.current)
+      harmonicOscillators.current.forEach((oscillator, index) => {
+        oscillator.connect(harmonicGains.current[index])
+        harmonicGains.current[index].connect(harmonicBus)
+        harmonicLevelCvInputs.current[index].connect(
+          harmonicGains.current[index].gain,
         )
-      } else if (lk("osc-out", "vca-audio-in")) {
-        osc.connect(vca)
-        let sig: AudioNode = vca
-        if (lk("adsr-env-out", "vca-cv-in")) {
-          vca.connect(env)
-          sig = env
-        }
-        routeToFX(
-          sig,
-          lk,
-          conv,
-          rwet,
-          rdry,
-          dly,
-          dwet,
-          pDlyL,
-          pDlyR,
-          pWet,
-          pDry,
-          master,
-          pingPong,
+        harmonicCenterCv.connect(harmonicCenterCvDepths.current[index])
+        harmonicCenterCvDepths.current[index].connect(
+          harmonicGains.current[index].gain,
         )
-      } else if (lk("osc-out", "reverb-audio-in") && conv && rwet && rdry) {
-        osc.connect(conv)
-        osc.connect(rdry)
-        if (lk("reverb-audio-out", "out-in")) {
-          rwet.connect(master)
-          rdry.connect(master)
-        }
-      } else if (lk("osc-out", "delay-audio-in")) {
-        if (pingPong && pDlyL && pWet && pDry) {
-          osc.connect(pDlyL)
-          osc.connect(pDry)
-          if (lk("delay-audio-out", "out-in")) {
-            pWet.connect(master)
-            pDry.connect(master)
-          }
-        } else if (dly && dwet) {
-          osc.connect(dly)
-          osc.connect(master)
-          if (lk("delay-audio-out", "out-in")) dwet.connect(master)
-        }
-      } else if (lk("osc-out", "out-in")) {
-        osc.connect(master)
+        harmonicWidthCv.connect(harmonicWidthCvDepths.current[index])
+        harmonicWidthCvDepths.current[index].connect(
+          harmonicGains.current[index].gain,
+        )
+      })
+      harmonicSources.forEach((oscillator, index) => {
+        harmonicVoct.connect(harmonicVoctDepths.current[index])
+        harmonicVoctDepths.current[index].connect(oscillator.detune)
+        harmonicLinearFm.connect(harmonicLinearFmDepths.current[index])
+        harmonicLinearFmDepths.current[index].connect(oscillator.frequency)
+        harmonicExponentialFm.connect(
+          harmonicExponentialFmDepths.current[index],
+        )
+        harmonicExponentialFmDepths.current[index].connect(oscillator.detune)
+      })
+      vca.connect(env)
+      env.connect(vcaBus)
+      if (lk("adsr-env-out", "vca-cv-in")) {
+        env.gain.setValueAtTime(0, ac.currentTime)
+      } else {
+        env.gain.setValueAtTime(1, ac.currentTime)
+      }
+
+      attenInput.connect(attenScale)
+      attenScale.connect(attenOutput)
+      attenOffset.connect(attenOutput)
+      channelGains.current.forEach((channel, index) => {
+        const meter = channelMeterNodes.current[index]
+        if (!meter) return
+        channel.connect(meter)
+        meter.connect(mixerBus)
+      })
+
+      revInput.connect(conv)
+      revInput.connect(rdry)
+      conv.connect(rwet)
+      rwet.connect(revOutput)
+      rdry.connect(revOutput)
+
+      dlyInput.connect(dly)
+      dlyInput.connect(dlyDry)
+      dly.connect(dlyFeedback)
+      dlyFeedback.connect(dly)
+      dly.connect(dwet)
+      dlyDry.connect(dlyNormalBus)
+      dwet.connect(dlyNormalBus)
+      dlyNormalBus.connect(dlyNormal)
+      dlyNormal.connect(dlyOutput)
+
+      dlyInput.connect(pDlyL)
+      dlyInput.connect(pDry)
+      pDlyL.connect(pFbL)
+      pFbL.connect(pDlyR)
+      pDlyR.connect(pFbR)
+      pFbR.connect(pDlyL)
+      pDlyL.connect(merger, 0, 0)
+      pDlyR.connect(merger, 0, 1)
+      merger.connect(splitter)
+      splitter.connect(panL, 0)
+      splitter.connect(panR, 1)
+      panL.connect(pWet)
+      panR.connect(pWet)
+      pWet.connect(dlyPingPongBus)
+      pDry.connect(dlyPingPongBus)
+      dlyPingPongBus.connect(dlyPingPong)
+      dlyPingPong.connect(dlyOutput)
+      dlyNormal.gain.setValueAtTime(pingPong ? 0 : 1, ac.currentTime)
+      dlyPingPong.gain.setValueAtTime(pingPong ? 1 : 0, ac.currentTime)
+
+      sampleAnalyser.connect(sampleSink)
+      sampleSink.connect(graphMute)
+      const lfoIsPatched = newCables.some(
+        (cable) => cable.from === "lfo-out" || cable.to === "lfo-out",
+      )
+      lg.gain.setTargetAtTime(lfoIsPatched ? lfoDepth : 0, ac.currentTime, 0.05)
+
+      const outputNodes: Partial<Record<PortId, AudioNode | null>> = {
+        "osc-out": osc,
+        "lfo-out": lg,
+        "filter-audio-out": filt,
+        "vca-out": vcaBus,
+        "reverb-audio-out": revOutput,
+        "delay-audio-out": dlyOutput,
+        "noise-out": noise,
+        "ring-audio-out": ringModLevel.current,
+        "sample-cv-out": sampleSource,
+        "wavefolder-audio-out": folder,
+        "attenuverter-cv-out": attenOutput,
+        "harmonic-out": harmonicBus,
+        "harmonic-1-out": harmonicOscillators.current[0],
+        "harmonic-2-out": harmonicOscillators.current[1],
+        "harmonic-3-out": harmonicOscillators.current[2],
+        "harmonic-4-out": harmonicOscillators.current[3],
+        "harmonic-5-out": harmonicOscillators.current[4],
+        "harmonic-6-out": harmonicOscillators.current[5],
+        "harmonic-7-out": harmonicOscillators.current[6],
+        "harmonic-8-out": harmonicOscillators.current[7],
+        "harmonic-triangle-out": harmonicWaveOscillators.current[0],
+        "harmonic-saw-out": harmonicWaveOscillators.current[1],
+        "harmonic-square-out": harmonicWaveOscillators.current[2],
+        "channel-mixer-out": mixerBus,
+        "granular-audio-out": granularLooper.current,
+        "spectral-phaser-audio-out": spectralPhaser.current,
+      }
+      const inputNodes: Partial<Record<PortId, AudioNode | null>> = {
+        "filter-audio-in": filt,
+        "vca-audio-in": vca,
+        "reverb-audio-in": revInput,
+        "delay-audio-in": dlyInput,
+        "ring-audio-a-in": ring,
+        "sample-cv-in": sampleAnalyser,
+        "wavefolder-audio-in": folder,
+        "attenuverter-cv-in": attenInput,
+        "channel-1-in": channelGains.current[0],
+        "channel-2-in": channelGains.current[1],
+        "channel-3-in": channelGains.current[2],
+        "channel-4-in": channelGains.current[3],
+        "channel-5-in": channelGains.current[4],
+        "channel-6-in": channelGains.current[5],
+        "channel-7-in": channelGains.current[6],
+        "channel-8-in": channelGains.current[7],
+        "spectral-phaser-audio-in": spectralPhaser.current,
+        "harmonic-v-oct-in": harmonicVoct,
+        "harmonic-lin-fm-in": harmonicLinearFm,
+        "harmonic-exp-fm-in": harmonicExponentialFm,
+        "harmonic-center-cv-in": harmonicCenterCv,
+        "harmonic-width-cv-in": harmonicWidthCv,
+        "harmonic-1-level-cv-in": harmonicLevelCvInputs.current[0],
+        "harmonic-2-level-cv-in": harmonicLevelCvInputs.current[1],
+        "harmonic-3-level-cv-in": harmonicLevelCvInputs.current[2],
+        "harmonic-4-level-cv-in": harmonicLevelCvInputs.current[3],
+        "harmonic-5-level-cv-in": harmonicLevelCvInputs.current[4],
+        "harmonic-6-level-cv-in": harmonicLevelCvInputs.current[5],
+        "harmonic-7-level-cv-in": harmonicLevelCvInputs.current[6],
+        "harmonic-8-level-cv-in": harmonicLevelCvInputs.current[7],
+        "granular-audio-in": granularLooper.current,
+        "out-in": master,
+      }
+      const inputParams: Partial<Record<PortId, AudioParam | null>> = {
+        "osc-fm-in": osc.frequency,
+        "filter-cv-in": filt.frequency,
+        "ring-audio-b-in": ring.gain,
+        "granular-freeze-cv-in":
+          granularLooper.current?.parameters.get("freezeCv") ?? null,
+        "granular-trigger-cv-in":
+          granularLooper.current?.parameters.get("triggerCv") ?? null,
+        "granular-position-cv-in":
+          granularLooper.current?.parameters.get("positionCv") ?? null,
+        "granular-size-cv-in":
+          granularLooper.current?.parameters.get("sizeCv") ?? null,
+        "granular-pitch-cv-in":
+          granularLooper.current?.parameters.get("pitchCv") ?? null,
+        "granular-blend-cv-in":
+          granularLooper.current?.parameters.get("blendCv") ?? null,
+        "spectral-phaser-rate-cv-in":
+          spectralPhaser.current?.parameters.get("rateCv") ?? null,
+        "spectral-phaser-depth-cv-in":
+          spectralPhaser.current?.parameters.get("depthCv") ?? null,
+        "spectral-phaser-resonance-cv-in":
+          spectralPhaser.current?.parameters.get("resonanceCv") ?? null,
+        "spectral-phaser-feedback-cv-in":
+          spectralPhaser.current?.parameters.get("feedbackCv") ?? null,
+        "spectral-phaser-mix-cv-in":
+          spectralPhaser.current?.parameters.get("mixCv") ?? null,
+        "spectral-phaser-low-cv-in":
+          spectralPhaser.current?.parameters.get("lowCv") ?? null,
+        "spectral-phaser-high1-cv-in":
+          spectralPhaser.current?.parameters.get("high1Cv") ?? null,
+        "spectral-phaser-high2-cv-in":
+          spectralPhaser.current?.parameters.get("high2Cv") ?? null,
+        "spectral-phaser-sweep-cv-in":
+          spectralPhaser.current?.parameters.get("sweepCv") ?? null,
+        "spectral-phaser-low-rate-cv-in":
+          spectralPhaser.current?.parameters.get("lowRateCv") ?? null,
+        "spectral-phaser-high-rate-cv-in":
+          spectralPhaser.current?.parameters.get("highRateCv") ?? null,
+      }
+      for (const cable of newCables) {
+        const source = outputNodes[cable.from]
+        const destination = inputNodes[cable.to]
+        const parameter = inputParams[cable.to]
+        if (source && destination) source.connect(destination)
+        else if (source && parameter) source.connect(parameter)
       }
     },
     [lfoDepth, pingPong],
@@ -486,6 +1195,22 @@ export default function RackContainer() {
         graphSyncTimer.current = null
         try {
           rebuildAudioGraph(newCables)
+          setPatchError(null)
+        } catch (error) {
+          if (
+            error instanceof DOMException &&
+            error.name === "InvalidAccessError"
+          ) {
+            console.error(
+              "The patch contains an unsupported audio feedback loop.",
+              error,
+            )
+            setPatchError(
+              "That patch creates an audio feedback loop without a delay.",
+            )
+          } else {
+            throw error
+          }
         } finally {
           const currentContext = ctx.current
           const currentMute = graphMuteGain.current
@@ -500,75 +1225,6 @@ export default function RackContainer() {
     },
     [rebuildAudioGraph],
   )
-
-  function routeToFX(
-    src: AudioNode,
-    lk: (a: PortId, b: PortId) => boolean,
-    conv: ConvolverNode | null,
-    rwet: GainNode | null,
-    rdry: GainNode | null,
-    dly: DelayNode | null,
-    dwet: GainNode | null,
-    pDlyL: DelayNode | null,
-    pDlyR: DelayNode | null,
-    pWet: GainNode | null,
-    pDry: GainNode | null,
-    master: GainNode,
-    isPingPong: boolean,
-  ) {
-    if (
-      lk("reverb-audio-in", "vca-out") ||
-      lk("reverb-audio-in", "filter-audio-out")
-    ) {
-      if (conv && rwet && rdry) {
-        src.connect(conv)
-        src.connect(rdry)
-        if (lk("reverb-audio-out", "delay-audio-in")) {
-          if (isPingPong && pDlyL && pWet && pDry) {
-            rwet.connect(pDlyL)
-            rdry.connect(pDlyL)
-            rwet.connect(pDry)
-            rdry.connect(pDry)
-            if (lk("delay-audio-out", "out-in")) {
-              pWet.connect(master)
-              pDry.connect(master)
-            }
-          } else if (dly && dwet) {
-            rwet.connect(dly)
-            rdry.connect(dly)
-            if (lk("delay-audio-out", "out-in")) {
-              dly.connect(master)
-              dwet.connect(master)
-            }
-          }
-        } else if (lk("reverb-audio-out", "out-in")) {
-          rwet.connect(master)
-          rdry.connect(master)
-        }
-        return
-      }
-    }
-    if (
-      lk("delay-audio-in", "vca-out") ||
-      lk("delay-audio-in", "filter-audio-out")
-    ) {
-      if (isPingPong && pDlyL && pWet && pDry) {
-        src.connect(pDlyL)
-        src.connect(pDry)
-        if (lk("delay-audio-out", "out-in")) {
-          pWet.connect(master)
-          pDry.connect(master)
-        }
-      } else if (dly && dwet) {
-        src.connect(dly)
-        src.connect(master)
-        if (lk("delay-audio-out", "out-in")) dwet.connect(master)
-      }
-      return
-    }
-    if (lk("vca-out", "out-in") || lk("filter-audio-out", "out-in"))
-      src.connect(master)
-  }
 
   // ── ADSR trigger ───────────────────────────────────────────────────────────
   const triggerADSR = useCallback(() => {
@@ -601,7 +1257,25 @@ export default function RackContainer() {
       0,
       now + preAttack + attack + decay + 0.05 + release,
     )
-  }, [attack, decay, sustain, release, cables])
+  }, [linked])
+
+  const sampleAndHold = useCallback(() => {
+    const ac = ctx.current
+    const input = sampleHoldAnalyser.current
+    const output = sampleHoldSource.current
+    if (!ac || !input || !output) return
+
+    input.getFloatTimeDomainData(sampleHoldData.current)
+    const sample =
+      sampleHoldData.current[sampleHoldData.current.length - 1] *
+        sampleHoldInputGainRef.current +
+      sampleHoldOffsetRef.current
+    output.offset.setTargetAtTime(
+      sample,
+      ac.currentTime,
+      Math.max(0.001, sampleHoldSlewRef.current),
+    )
+  }, [])
 
   // ── Sequencer ──────────────────────────────────────────────────────────────
   const stepSeq = useCallback(() => {
@@ -610,26 +1284,40 @@ export default function RackContainer() {
       seqStepRef.current = next
       if (
         ctx.current &&
-        oscNode.current &&
-        linked("seq-cv-out", "osc-voct-in")
+        (linked("seq-cv-out", "osc-voct-in") ||
+          linked("seq-cv-out", "harmonic-v-oct-in"))
       ) {
         const quantized = quantizeToScale(
           seqNotesRef.current[next],
           SCALE_NAMES[scaleIdx],
           rootIdx,
         )
-        oscNode.current.frequency.setTargetAtTime(
-          midiToHz(quantized),
-          ctx.current.currentTime,
-          0.01,
-        )
+        const frequency = midiToHz(quantized)
+        if (linked("seq-cv-out", "osc-voct-in") && oscNode.current)
+          oscNode.current.frequency.setTargetAtTime(
+            frequency,
+            ctx.current.currentTime,
+            0.01,
+          )
+        if (linked("seq-cv-out", "harmonic-v-oct-in")) {
+          ;[
+            ...harmonicOscillators.current,
+            ...harmonicWaveOscillators.current,
+          ].forEach((oscillator, index) =>
+            oscillator.frequency.setTargetAtTime(
+              frequency * (index < 8 ? index + 1 : 1),
+              ctx.current!.currentTime,
+              0.01,
+            ),
+          )
+        }
       }
       if (linked("seq-gate-out", "adsr-gate-in")) triggerADSR()
       return next
     })
     setClockBeat(true)
     setTimeout(() => setClockBeat(false), 80)
-  }, [scaleIdx, rootIdx, cables]) // eslint-disable-line
+  }, [scaleIdx, rootIdx, linked, triggerADSR])
 
   useEffect(() => {
     seqNotesRef.current = seqNotes
@@ -642,11 +1330,12 @@ export default function RackContainer() {
     clockRef.current = setInterval(() => {
       if (!ctx.current) return
       if (linked("clock-out", "seq-clock-in")) stepSeq()
+      if (linked("clock-out", "sample-clock-in")) sampleAndHold()
     }, interval)
     return () => {
       if (clockRef.current) clearInterval(clockRef.current)
     }
-  }, [bpm, stepSeq, cables]) // eslint-disable-line
+  }, [bpm, stepSeq, sampleAndHold, linked])
 
   // ── Param → audio sync ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -659,15 +1348,14 @@ export default function RackContainer() {
   }, [lfoRate])
   useEffect(() => {
     if (lfoGain.current && ctx.current) {
-      const on =
-        linked("lfo-out", "osc-fm-in") || linked("lfo-out", "filter-cv-in")
+      const on = cables.some((cable) => cable.from === "lfo-out")
       lfoGain.current.gain.setTargetAtTime(
         on ? lfoDepth : 0,
         ctx.current.currentTime,
         0.05,
       )
     }
-  }, [lfoDepth, cables]) // eslint-disable-line
+  }, [lfoDepth, cables])
   useEffect(() => {
     if (oscNode.current) oscNode.current.type = WAVEFORMS[oscWaveIdx]
   }, [oscWaveIdx])
@@ -721,7 +1409,7 @@ export default function RackContainer() {
         ctx.current.currentTime,
         0.05,
       )
-  }, [delayTime])
+  }, [delayTime, linked])
   useEffect(() => {
     if (delayFbGain.current && ctx.current)
       delayFbGain.current.gain.setTargetAtTime(
@@ -770,7 +1458,7 @@ export default function RackContainer() {
           0.01,
         )
     }
-  }, [bpm, ppDivision])
+  }, [bpm, ppDivision, linked])
   useEffect(() => {
     if (ctx.current) syncGraph(cables)
   }, [pingPong]) // eslint-disable-line
@@ -781,7 +1469,260 @@ export default function RackContainer() {
         ctx.current.currentTime,
         0.05,
       )
-  }, [oscFreq, cables]) // eslint-disable-line
+  }, [oscFreq, linked])
+  useEffect(() => {
+    noiseColorRef.current = noiseColor
+    const ac = ctx.current
+    const gain = noiseGain.current
+    if (!ac || !gain) return
+    const previous = noiseSource.current
+    const next = ac.createBufferSource()
+    next.buffer = createNoiseBuffer(ac, noiseColor)
+    next.loop = true
+    next.start()
+    noiseSource.current = next
+    if (previous) previous.stop()
+    syncGraph(cablesRef.current)
+  }, [noiseColor]) // eslint-disable-line
+  useEffect(() => {
+    noiseLevelRef.current = noiseLevel
+    if (noiseGain.current && ctx.current)
+      noiseGain.current.gain.setTargetAtTime(
+        noiseLevel,
+        ctx.current.currentTime,
+        0.05,
+      )
+  }, [noiseLevel])
+  useEffect(() => {
+    ringModLevelRef.current = ringModLevelValue
+    if (ringModLevel.current && ctx.current)
+      ringModLevel.current.gain.setTargetAtTime(
+        ringModLevelValue,
+        ctx.current.currentTime,
+        0.05,
+      )
+  }, [ringModLevelValue])
+  useEffect(() => {
+    sampleHoldInputGainRef.current = sampleHoldInputGain
+  }, [sampleHoldInputGain])
+  useEffect(() => {
+    sampleHoldOffsetRef.current = sampleHoldOffset
+  }, [sampleHoldOffset])
+  useEffect(() => {
+    sampleHoldSlewRef.current = sampleHoldSlew
+  }, [sampleHoldSlew])
+  useEffect(() => {
+    if (wavefolder.current)
+      wavefolder.current.curve = createWavefolderCurve(
+        wavefolderFold,
+        wavefolderBias,
+      )
+  }, [wavefolderFold, wavefolderBias])
+  useEffect(() => {
+    attenuverterAmountRef.current = attenuverterAmount
+    if (attenuverterScale.current && ctx.current)
+      attenuverterScale.current.gain.setTargetAtTime(
+        attenuverterAmount,
+        ctx.current.currentTime,
+        0.05,
+      )
+  }, [attenuverterAmount])
+  useEffect(() => {
+    attenuverterOffsetRef.current = attenuverterOffsetValue
+    if (attenuverterOffset.current && ctx.current)
+      attenuverterOffset.current.offset.setTargetAtTime(
+        attenuverterOffsetValue,
+        ctx.current.currentTime,
+        0.05,
+      )
+  }, [attenuverterOffsetValue])
+  useEffect(() => {
+    if (!ctx.current) return
+    const now = ctx.current.currentTime
+    if (!linked("seq-cv-out", "harmonic-v-oct-in")) {
+      const oscillators = [
+        ...harmonicOscillators.current,
+        ...harmonicWaveOscillators.current,
+      ]
+      oscillators.forEach((oscillator, index) =>
+        oscillator.frequency.setTargetAtTime(
+          harmonicFrequency * (index < 8 ? index + 1 : 1),
+          now,
+          0.05,
+        ),
+      )
+    }
+    harmonicLinearFmDepths.current.forEach((depth, index) =>
+      depth.gain.setTargetAtTime(
+        harmonicFrequency * harmonicLinearFmDepth * (index < 8 ? index + 1 : 1),
+        now,
+        0.05,
+      ),
+    )
+  }, [harmonicFrequency, harmonicLinearFmDepth, linked])
+  useEffect(() => {
+    if (!ctx.current) return
+    harmonicGains.current.forEach((gain, index) => {
+      gain.gain.setTargetAtTime(
+        harmonicLevelFor(
+          harmonicLevels[index],
+          index,
+          harmonicCenter,
+          harmonicWidth,
+          harmonicTilt,
+        ),
+        ctx.current!.currentTime,
+        0.05,
+      )
+      harmonicCenterCvDepths.current[index].gain.setTargetAtTime(
+        harmonicCenterCvDepthFor(
+          harmonicLevels[index],
+          index,
+          harmonicCenter,
+          harmonicWidth,
+          harmonicTilt,
+          harmonicCenterCvDepth,
+        ),
+        ctx.current!.currentTime,
+        0.05,
+      )
+      harmonicWidthCvDepths.current[index].gain.setTargetAtTime(
+        harmonicWidthCvDepthFor(
+          harmonicLevels[index],
+          index,
+          harmonicCenter,
+          harmonicWidth,
+          harmonicTilt,
+          harmonicWidthCvDepth,
+        ),
+        ctx.current!.currentTime,
+        0.05,
+      )
+    })
+  }, [
+    harmonicCenter,
+    harmonicCenterCvDepth,
+    harmonicLevels,
+    harmonicTilt,
+    harmonicWidth,
+    harmonicWidthCvDepth,
+  ])
+  useEffect(() => {
+    if (harmonicOutput.current && ctx.current)
+      harmonicOutput.current.gain.setTargetAtTime(
+        harmonicMixGainFor(
+          harmonicLevels,
+          harmonicCenter,
+          harmonicWidth,
+          harmonicTilt,
+        ),
+        ctx.current.currentTime,
+        0.05,
+      )
+  }, [harmonicLevels, harmonicCenter, harmonicWidth, harmonicTilt])
+  useEffect(() => {
+    harmonicExponentialFmDepths.current.forEach((depth) => {
+      depth.gain.value = harmonicExponentialFmAmount * 1200
+    })
+  }, [harmonicExponentialFmAmount])
+  useEffect(() => {
+    channelGains.current.forEach((gain, index) => {
+      if (ctx.current && channelLevels[index] !== undefined)
+        gain.gain.setTargetAtTime(
+          channelLevels[index],
+          ctx.current.currentTime,
+          0.05,
+        )
+    })
+  }, [channelLevels])
+  useEffect(() => {
+    granularParamsRef.current = {
+      position: grainPosition,
+      grainSize,
+      pitch: grainPitch,
+      inputGain: grainInputGain,
+      density: grainDensity,
+      texture: grainTexture,
+      feedback: grainFeedback,
+      mix: grainMix,
+      frozen: granularFrozen,
+    }
+    granularLooper.current?.port.postMessage({
+      type: "params",
+      values: granularParamsRef.current,
+    })
+  }, [
+    grainPosition,
+    grainSize,
+    grainPitch,
+    grainInputGain,
+    grainDensity,
+    grainTexture,
+    grainFeedback,
+    grainMix,
+    granularFrozen,
+  ])
+  useEffect(() => {
+    cablesRef.current = cables
+  }, [cables])
+  useEffect(() => {
+    if (granularReady) syncGraph(cables)
+  }, [granularReady]) // eslint-disable-line
+  useEffect(() => {
+    if (spectralPhaserReady) syncGraph(cables)
+  }, [spectralPhaserReady]) // eslint-disable-line
+  useEffect(() => {
+    const node = spectralPhaser.current
+    const ac = ctx.current
+    if (!node || !ac) return
+
+    const parameters: [string, number][] = [
+      ["rate", spectralPhaserSettings.rate],
+      ["depth", spectralPhaserSettings.depth],
+      ["resonance", spectralPhaserSettings.resonance],
+      ["feedback", spectralPhaserSettings.feedback],
+      ["mix", spectralPhaserSettings.mix],
+      ["output", spectralPhaserSettings.output],
+      ["low", spectralPhaserSettings.low],
+      ["high1", spectralPhaserSettings.high1],
+      ["high2", spectralPhaserSettings.high2],
+      ["lowFrequency", spectralPhaserSettings.lowFrequency],
+      ["high1Frequency", spectralPhaserSettings.high1Frequency],
+      ["high2Frequency", spectralPhaserSettings.high2Frequency],
+      ["sweep", spectralPhaserSettings.sweep],
+      ["phase", spectralPhaserSettings.phase],
+      ["stereoWidth", spectralPhaserSettings.stereoWidth],
+      ["lowRate", spectralPhaserSettings.lowRate],
+      ["highRate", spectralPhaserSettings.highRate],
+      ["shape", spectralPhaserSettings.shape],
+      ["sync", spectralPhaserSettings.sync ? 1 : 0],
+      ["bpm", bpm],
+    ]
+
+    for (const [name, value] of parameters) {
+      const parameter = node.parameters.get(name)
+      if (!parameter) {
+        setAudioError(`Spectral Phaser parameter "${name}" is unavailable.`)
+        return
+      }
+
+      if (name === "shape" || name === "sync") {
+        parameter.setValueAtTime(value, ac.currentTime)
+      } else {
+        parameter.setTargetAtTime(value, ac.currentTime, 0.02)
+      }
+    }
+  }, [bpm, spectralPhaserReady, spectralPhaserSettings])
+  useEffect(
+    () => () => {
+      const node = spectralPhaser.current
+      if (!node) return
+      node.disconnect()
+      node.port.close()
+      spectralPhaser.current = null
+    },
+    [],
+  )
   useEffect(() => {
     vcaLevelRef.current = vcaLevel
     if (vcaGain.current && ctx.current)
@@ -824,7 +1765,8 @@ export default function RackContainer() {
           (an ? buf[Math.floor((i * buf.length) / canvas.width)] : 128) / 128 -
           1
         const y = (v * canvas.height) / 2 + canvas.height / 2
-        i === 0 ? c2d.moveTo(i, y) : c2d.lineTo(i, y)
+        if (i === 0) c2d.moveTo(i, y)
+        else c2d.lineTo(i, y)
       }
       c2d.stroke()
     }
@@ -838,13 +1780,13 @@ export default function RackContainer() {
       const r = rackRef.current?.getBoundingClientRect()
       if (r)
         setMousePos({
-          x: (e.clientX - r.left) / fitScale,
-          y: (e.clientY - r.top) / fitScale,
+          x: e.clientX - r.left,
+          y: e.clientY - r.top,
         })
     }
     window.addEventListener("mousemove", onMove)
     return () => window.removeEventListener("mousemove", onMove)
-  }, [fitScale])
+  }, [])
 
   // ── Auto patch cables ──────────────────────────────────────────────────────
   const AUTO_PATCH_CABLES: Cable[] = [
@@ -864,6 +1806,7 @@ export default function RackContainer() {
 
   const doAutoPatch = useCallback(() => {
     initAudio()
+    cablesRef.current = AUTO_PATCH_CABLES
     setCables(AUTO_PATCH_CABLES)
     setColorIdx(0)
     syncGraph(AUTO_PATCH_CABLES)
@@ -914,6 +1857,7 @@ export default function RackContainer() {
           color: dragging.color,
         }
         const nc = [...cables, cable]
+        cablesRef.current = nc
         setCables(nc)
         setDragging(null)
         setColorIdx((i) => (i + 1) % CABLE_COLORS.length)
@@ -924,6 +1868,7 @@ export default function RackContainer() {
         )
         if (existIdx >= 0) {
           const nc = cables.filter((_, i) => i !== existIdx)
+          cablesRef.current = nc
           setCables(nc)
           syncGraph(nc)
           return
@@ -942,8 +1887,8 @@ export default function RackContainer() {
     const pr = el.getBoundingClientRect()
     const rr = rack.getBoundingClientRect()
     return {
-      x: (pr.left + pr.width / 2 - rr.left) / fitScale,
-      y: (pr.top + pr.height / 2 - rr.top) / fitScale,
+      x: pr.left + pr.width / 2 - rr.left,
+      y: pr.top + pr.height / 2 - rr.top,
     }
   }
 
@@ -956,7 +1901,10 @@ export default function RackContainer() {
   }
 
   // ── Port render helper ─────────────────────────────────────────────────────
-  const mkPort = (def: PortDef) => {
+  const mkPort = (
+    def: PortDef,
+    orientation: "horizontal" | "vertical" = "horizontal",
+  ) => {
     const fromDef = dragging
       ? ALL_PORT_DEFS.find((p) => p.id === dragging.portId)
       : null
@@ -972,6 +1920,7 @@ export default function RackContainer() {
         }
         highlighted={highlighted}
         dragging={!!dragging}
+        orientation={orientation}
         onRef={(id, el) => {
           portRefs.current[id] = el ?? undefined
         }}
@@ -1070,8 +2019,8 @@ export default function RackContainer() {
     )
   }
 
-  // ── MOBILE: Landscape — preset-only performance view ──────────────────────
-  if (isMobile && !isPortrait) {
+  // ── MOBILE: Landscape — compact performance view ─────────────────────────
+  if (isMobile && !isPortrait && !mobileShowFullRack) {
     // mini patch view (modules + cables) from actual patch
     // Rack layout for auto-patch: CLK → SEQ → OSCILLATOR → FILTER → VCA → REVERB → DELAY → AUDIO OUT
     const MINI_MODULES = [
@@ -1349,6 +2298,38 @@ export default function RackContainer() {
         >
           {mobilePatchReady ? "playing" : "loading..."}
         </span>
+        {(audioError || patchError) && (
+          <span
+            role="alert"
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "8px",
+              color: "var(--tone-output)",
+              marginTop: "8px",
+            }}
+          >
+            {audioError ?? patchError}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setMobileShowFullRack(true)}
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: "9px",
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--ink)",
+            background: "var(--surface)",
+            border: "1px solid var(--line-strong)",
+            borderRadius: "4px",
+            padding: "8px 14px",
+            marginTop: "18px",
+          }}
+        >
+          open full rack
+        </button>
         <a
           href="https://ritasilva.online"
           style={{
@@ -1369,12 +2350,16 @@ export default function RackContainer() {
   }
 
   // ── DESKTOP / TABLET: Full rack ────────────────────────────────────────────
+  const mobileFullRack = isMobile && !isPortrait
   return (
     <div
       style={{
         position: "relative",
-        width: fitSize.width * fitScale,
-        height: fitSize.height * fitScale,
+        width: mobileFullRack ? "100vw" : fitSize.width,
+        height: mobileFullRack ? "100dvh" : fitSize.height,
+        overflow: mobileFullRack ? "auto" : "visible",
+        overscrollBehavior: mobileFullRack ? "contain" : "auto",
+        marginInline: mobileFullRack ? 0 : "auto",
         flexShrink: 0,
       }}
     >
@@ -1382,14 +2367,32 @@ export default function RackContainer() {
         ref={fitContentRef}
         className="flex flex-col items-center gap-3 p-4 select-none w-max"
         style={{
-          position: "absolute",
+          position: mobileFullRack ? "relative" : "absolute",
           top: 0,
           left: 0,
-          transform: `scale(${fitScale})`,
-          transformOrigin: "top left",
           cursor: dragging ? "none" : "default",
         }}
       >
+        {mobileFullRack && (
+          <button
+            type="button"
+            onClick={() => setMobileShowFullRack(false)}
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "9px",
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "var(--ink)",
+              background: "var(--surface)",
+              border: "1px solid var(--line-strong)",
+              borderRadius: "4px",
+              padding: "8px 14px",
+            }}
+          >
+            back to performance view
+          </button>
+        )}
         <header className="desktop-brand">
           <div className="desktop-brand__eyebrow">Rita Silva · Experiments</div>
           <h1 className="desktop-brand__title">Modular Synth</h1>
@@ -1399,7 +2402,7 @@ export default function RackContainer() {
         </header>
         <div
           ref={rackRef}
-          className="rack-shell relative flex gap-[3px]"
+          className="rack-shell relative flex flex-col gap-[3px]"
           style={{
             width: "fit-content",
             //marginBottom: "120px",
@@ -1491,116 +2494,204 @@ export default function RackContainer() {
               })()}
           </svg>
 
-          {/* ── CLOCK ────────────────────────────────────────────── */}
-          <ClockModule
-            bpm={bpm}
-            clockBeat={clockBeat}
-            onBpmChange={setBpm}
-            mkPort={mkPort}
-          />
+          <div className="rack-row rack-row--sources flex gap-[3px]">
+            <ClockModule
+              bpm={bpm}
+              clockBeat={clockBeat}
+              onBpmChange={setBpm}
+              mkPort={mkPort}
+            />
+            <SequencerModule
+              seqStep={seqStep}
+              seqNotes={seqNotes}
+              scaleIdx={scaleIdx}
+              rootIdx={rootIdx}
+              onScaleChange={setScaleIdx}
+              onRootChange={setRootIdx}
+              onNoteChange={(index, value) =>
+                setSeqNotes((previous) => {
+                  const next = [...previous]
+                  next[index] = value
+                  return next
+                })
+              }
+              mkPort={mkPort}
+            />
+            <LfoModule
+              lfoRate={lfoRate}
+              lfoDepth={lfoDepth}
+              onRateChange={setLfoRate}
+              onDepthChange={setLfoDepth}
+              mkPort={mkPort}
+            />
+            <OscillatorModule
+              oscFreq={oscFreq}
+              oscWaveIdx={oscWaveIdx}
+              onFreqChange={setOscFreq}
+              onWaveChange={(value) => setOscWaveIdx(Math.round(value))}
+              mkPort={mkPort}
+            />
+            <HarmonicOscillatorModule
+              frequency={harmonicFrequency}
+              levels={harmonicLevels}
+              center={harmonicCenter}
+              width={harmonicWidth}
+              tilt={harmonicTilt}
+              linearFmDepth={harmonicLinearFmDepth}
+              exponentialFmAmount={harmonicExponentialFmAmount}
+              centerCvDepth={harmonicCenterCvDepth}
+              widthCvDepth={harmonicWidthCvDepth}
+              onFrequencyChange={setHarmonicFrequency}
+              onLevelChange={(partial, level) =>
+                setHarmonicLevels((current) =>
+                  current.map((value, index) =>
+                    index === partial ? level : value,
+                  ),
+                )
+              }
+              onCenterChange={setHarmonicCenter}
+              onWidthChange={setHarmonicWidth}
+              onTiltChange={setHarmonicTilt}
+              onLinearFmDepthChange={setHarmonicLinearFmDepth}
+              onExponentialFmAmountChange={setHarmonicExponentialFmAmount}
+              onCenterCvDepthChange={setHarmonicCenterCvDepth}
+              onWidthCvDepthChange={setHarmonicWidthCvDepth}
+              mkPort={mkPort}
+            />
+            <AttenuverterModule
+              amount={attenuverterAmount}
+              offset={attenuverterOffsetValue}
+              onAmountChange={setAttenuverterAmount}
+              onOffsetChange={setAttenuverterOffsetValue}
+              mkPort={mkPort}
+            />
+            <NoiseModule
+              color={noiseColor}
+              level={noiseLevel}
+              onColorChange={setNoiseColor}
+              onLevelChange={setNoiseLevel}
+              mkPort={mkPort}
+            />
+            <RingModModule
+              level={ringModLevelValue}
+              onLevelChange={setRingModLevelValue}
+              mkPort={mkPort}
+            />
+            <SpectralPhaserModule
+              settings={spectralPhaserSettings}
+              onSettingsChange={updateSpectralPhaserSettings}
+              bpm={bpm}
+              mkPort={mkPort}
+            />
+          </div>
 
-          {/* ── SEQUENCER ────────────────────────────────────────── */}
-          <SequencerModule
-            seqStep={seqStep}
-            seqNotes={seqNotes}
-            scaleIdx={scaleIdx}
-            rootIdx={rootIdx}
-            onScaleChange={setScaleIdx}
-            onRootChange={setRootIdx}
-            onNoteChange={(index, value) =>
-              setSeqNotes((previous) => {
-                const next = [...previous]
-                next[index] = value
-                return next
-              })
-            }
-            mkPort={mkPort}
-          />
-
-          {/* ── ADSR ─────────────────────────────────────────────── */}
-          <EnvelopeModule
-            attack={attack}
-            decay={decay}
-            sustain={sustain}
-            release={release}
-            onAttackChange={setAttack}
-            onDecayChange={setDecay}
-            onSustainChange={setSustain}
-            onReleaseChange={setRelease}
-            mkPort={mkPort}
-          />
-
-          {/* ── LFO ──────────────────────────────────────────────── */}
-          <LfoModule
-            lfoRate={lfoRate}
-            lfoDepth={lfoDepth}
-            onRateChange={setLfoRate}
-            onDepthChange={setLfoDepth}
-            mkPort={mkPort}
-          />
-
-          {/* ── OSC ──────────────────────────────────────────────── */}
-          <OscillatorModule
-            oscFreq={oscFreq}
-            oscWaveIdx={oscWaveIdx}
-            onFreqChange={setOscFreq}
-            onWaveChange={(value) => setOscWaveIdx(Math.round(value))}
-            mkPort={mkPort}
-          />
-
-          {/* ── FILTER ───────────────────────────────────────────── */}
-          <FilterModule
-            filterType={filterType}
-            filterCutoff={filterCutoff}
-            filterRes={filterRes}
-            onTypeChange={setFilterType}
-            onCutoffChange={setFilterCutoff}
-            onResChange={setFilterRes}
-            mkPort={mkPort}
-          />
-
-          {/* ── VCA ──────────────────────────────────────────────── */}
-          <VcaModule
-            vcaLevel={vcaLevel}
-            onLevelChange={updateVcaLevel}
-            waveRef={waveRef}
-            mkPort={mkPort}
-          />
-
-          {/* ── REVERB ───────────────────────────────────────────── */}
-          <ReverbModule
-            reverbSize={reverbSize}
-            reverbMix={reverbMix}
-            onSizeChange={setReverbSize}
-            onMixChange={setReverbMix}
-            mkPort={mkPort}
-          />
-
-          {/* ── DELAY ────────────────────────────────────────────── */}
-          <DelayModule
-            delayTime={delayTime}
-            delayFb={delayFb}
-            delayMix={delayMix}
-            pingPong={pingPong}
-            ppDivision={ppDivision}
-            ppDelayTime={ppDelayTime}
-            bpm={bpm}
-            clocked={linked("delay-clock-in", "clock-out")}
-            onPpDivisionChange={setPpDivision}
-            onTimeChange={setDelayTime}
-            onFbChange={setDelayFb}
-            onMixChange={setDelayMix}
-            onPingPongToggle={setPingPong}
-            mkPort={mkPort}
-          />
-
-          {/* ── OUTPUT ───────────────────────────────────────────── */}
-          <MixerModule
-            masterVol={masterVol}
-            isActive={connectedPorts.has("out-in")}
-            onVolChange={setMasterVol}
-            mkPort={mkPort}
-          />
+          <div className="rack-row rack-row--processing flex gap-[3px]">
+            <SampleHoldModule
+              inputGain={sampleHoldInputGain}
+              offset={sampleHoldOffset}
+              slew={sampleHoldSlew}
+              onInputGainChange={setSampleHoldInputGain}
+              onOffsetChange={setSampleHoldOffset}
+              onSlewChange={setSampleHoldSlew}
+              mkPort={mkPort}
+            />
+            <EnvelopeModule
+              attack={attack}
+              decay={decay}
+              sustain={sustain}
+              release={release}
+              onAttackChange={setAttack}
+              onDecayChange={setDecay}
+              onSustainChange={setSustain}
+              onReleaseChange={setRelease}
+              mkPort={mkPort}
+            />
+            <FilterModule
+              filterType={filterType}
+              filterCutoff={filterCutoff}
+              filterRes={filterRes}
+              onTypeChange={setFilterType}
+              onCutoffChange={setFilterCutoff}
+              onResChange={setFilterRes}
+              mkPort={mkPort}
+            />
+            <VcaModule
+              vcaLevel={vcaLevel}
+              onLevelChange={updateVcaLevel}
+              waveRef={waveRef}
+              mkPort={mkPort}
+            />
+            <WavefolderModule
+              fold={wavefolderFold}
+              bias={wavefolderBias}
+              onFoldChange={setWavefolderFold}
+              onBiasChange={setWavefolderBias}
+              mkPort={mkPort}
+            />
+            <CloudyModule
+              position={grainPosition}
+              grainSize={grainSize}
+              pitch={grainPitch}
+              inputGain={grainInputGain}
+              density={grainDensity}
+              texture={grainTexture}
+              feedback={grainFeedback}
+              blend={grainMix}
+              frozen={granularFrozen}
+              onPositionChange={setGrainPosition}
+              onGrainSizeChange={setGrainSize}
+              onPitchChange={setGrainPitch}
+              onInputGainChange={setGrainInputGain}
+              onDensityChange={setGrainDensity}
+              onTextureChange={setGrainTexture}
+              onFeedbackChange={setGrainFeedback}
+              onBlendChange={setGrainMix}
+              onFreezeToggle={() => setGranularFrozen((current) => !current)}
+              mkPort={mkPort}
+            />
+            <ReverbModule
+              reverbSize={reverbSize}
+              reverbMix={reverbMix}
+              onSizeChange={setReverbSize}
+              onMixChange={setReverbMix}
+              mkPort={mkPort}
+            />
+            <DelayModule
+              delayTime={delayTime}
+              delayFb={delayFb}
+              delayMix={delayMix}
+              pingPong={pingPong}
+              ppDivision={ppDivision}
+              ppDelayTime={ppDelayTime}
+              bpm={bpm}
+              clocked={linked("delay-clock-in", "clock-out")}
+              onPpDivisionChange={setPpDivision}
+              onTimeChange={setDelayTime}
+              onFbChange={setDelayFb}
+              onMixChange={setDelayMix}
+              onPingPongToggle={setPingPong}
+              mkPort={mkPort}
+            />
+            <ChannelMixerModule
+              levels={channelLevels}
+              onLevelChange={(channel, level) =>
+                setChannelLevels((current) =>
+                  current.map((value, index) =>
+                    index === channel ? level : value,
+                  ),
+                )
+              }
+              meters={channelMeterAnalyzers}
+              mkPort={mkPort}
+            />
+            <MixerModule
+              masterVol={masterVol}
+              isActive={connectedPorts.has("out-in")}
+              analyser={outputMeterAnalyser}
+              onVolChange={setMasterVol}
+              mkPort={mkPort}
+            />
+          </div>
         </div>
 
         {/* Status + controls */}
@@ -1611,6 +2702,19 @@ export default function RackContainer() {
             marginTop: "24px",
           }}
         >
+          {audioError && (
+            <span
+              role="alert"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "9px",
+                color: "var(--tone-output)",
+                marginBottom: "8px",
+              }}
+            >
+              {audioError}
+            </span>
+          )}
           <span
             style={{
               fontFamily: "var(--font-sans)",
@@ -1633,6 +2737,7 @@ export default function RackContainer() {
           <div className="flex gap-2" style={{ marginTop: "16px" }}>
             <button
               onClick={() => {
+                cablesRef.current = []
                 setCables([])
                 syncGraph([])
                 setDragging(null)
