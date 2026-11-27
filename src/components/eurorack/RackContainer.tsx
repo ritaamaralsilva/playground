@@ -349,6 +349,8 @@ export default function RackContainer() {
     useState<SpectralPhaserSettings>(DEFAULT_SPECTRAL_PHASER_SETTINGS)
   const [spectralPhaserReady, setSpectralPhaserReady] = useState(false)
   const [audioError, setAudioError] = useState<string | null>(null)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
+  const [audioRunning, setAudioRunning] = useState(false)
   const [patchError, setPatchError] = useState<string | null>(null)
   const updateSpectralPhaserSettings = useCallback(
     (patch: Partial<SpectralPhaserSettings>) =>
@@ -544,11 +546,44 @@ export default function RackContainer() {
   )
 
   // ── Audio init ─────────────────────────────────────────────────────────────
+  const resumeAudio = useCallback((audioContext: AudioContext) => {
+    if (audioContext.state === "running") {
+      setAudioRunning(true)
+      return
+    }
+
+    if (audioContext.state === "closed") {
+      setPlaybackError("Audio is unavailable. Reload the page to try again.")
+      return
+    }
+
+    void audioContext
+      .resume()
+      .then(() => {
+        const running = audioContext.state === "running"
+        setAudioRunning(running)
+        if (running) setPlaybackError(null)
+      })
+      .catch((error: unknown) => {
+        console.error("Could not resume audio playback.", error)
+        setPlaybackError("Audio did not start. Tap to try again.")
+      })
+  }, [])
+
   const initAudio = useCallback(() => {
-    if (audioStarted.current) return
+    if (audioStarted.current) {
+      if (ctx.current) resumeAudio(ctx.current)
+      return
+    }
     audioStarted.current = true
     const ac = new AudioContext()
     ctx.current = ac
+    ac.addEventListener("statechange", () => {
+      const running = ac.state === "running"
+      setAudioRunning(running)
+      if (running) setPlaybackError(null)
+    })
+    resumeAudio(ac)
 
     const osc = ac.createOscillator()
     osc.type = WAVEFORMS[oscWaveIdx]
@@ -1018,6 +1053,7 @@ export default function RackContainer() {
     wavefolderBias,
     attenuverterAmount,
     attenuverterOffsetValue,
+    resumeAudio,
   ])
 
   // ── Sync audio graph ───────────────────────────────────────────────────────
@@ -2588,6 +2624,7 @@ export default function RackContainer() {
           userSelect: "none",
           boxSizing: "border-box",
         }}
+        onPointerDown={initAudio}
       >
         <span
           style={{
@@ -2757,10 +2794,10 @@ export default function RackContainer() {
             width: 6,
             height: 6,
             borderRadius: "50%",
-            background: mobilePatchReady
+            background: audioRunning
               ? "var(--tone-lfo)"
               : "color-mix(in srgb, var(--tone-lfo) 16%, var(--surface))",
-            boxShadow: mobilePatchReady
+            boxShadow: audioRunning
               ? "0 0 8px color-mix(in srgb, var(--tone-lfo) 45%, transparent)"
               : "none",
             marginTop: "16px",
@@ -2770,15 +2807,40 @@ export default function RackContainer() {
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "7px",
-            color: mobilePatchReady ? "var(--tone-lfo)" : "var(--muted)",
+            color: audioRunning ? "var(--tone-lfo)" : "var(--muted)",
             letterSpacing: "0.15em",
             textTransform: "uppercase",
             marginTop: "6px",
           }}
         >
-          {mobilePatchReady ? "playing" : "loading..."}
+          {!mobilePatchReady
+            ? "loading..."
+            : audioRunning
+              ? "playing"
+              : "tap to enable sound"}
         </span>
-        {(audioError || patchError) && (
+        {mobilePatchReady && !audioRunning && (
+          <button
+            type="button"
+            onClick={initAudio}
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "9px",
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "var(--ink)",
+              background: "var(--surface)",
+              border: "1px solid var(--line-strong)",
+              borderRadius: "4px",
+              padding: "8px 14px",
+              marginTop: "10px",
+            }}
+          >
+            enable sound
+          </button>
+        )}
+        {(playbackError || audioError || patchError) && (
           <span
             role="alert"
             style={{
@@ -2788,7 +2850,7 @@ export default function RackContainer() {
               marginTop: "8px",
             }}
           >
-            {audioError ?? patchError}
+            {playbackError ?? audioError ?? patchError}
           </span>
         )}
         <button
@@ -3214,7 +3276,7 @@ export default function RackContainer() {
             marginTop: "24px",
           }}
         >
-          {audioError && (
+          {(playbackError || audioError) && (
             <span
               role="alert"
               style={{
@@ -3224,7 +3286,7 @@ export default function RackContainer() {
                 marginBottom: "8px",
               }}
             >
-              {audioError}
+              {playbackError ?? audioError}
             </span>
           )}
           <span
