@@ -21,9 +21,17 @@ Created by Rita Silva as a web-based companion to
 - Build a patch by connecting digital CV ports, or start with **Auto Patch**.
 - Sequence five notes and quantize them to a musical scale and root note.
 - Shape pitch, tone, and amplitude with an LFO, filter, and ADSR envelope.
+- Explore Buchla-inspired noise, ring modulation, sample-and-hold, wavefolding,
+  harmonic synthesis, and CV processing.
+- Mix four audio channels or capture a rolling four-second buffer for granular
+  texture, feedback, and freeze effects.
 - Add convolution reverb and tempo-synced or ping-pong delay.
+- Shape audio with an original HM-2-inspired spectral phaser, featuring moving
+  resonant bands, independent low/high modulation rates, feedback, and stereo
+  offset.
 - Watch the output waveform while you play.
-- Use the full rack on desktop or rotate a phone to landscape view to play with it.
+- Use the full rack on desktop and landscape phones, with an optional compact
+  performance view on mobile.
 
 ## Architecture
 
@@ -68,18 +76,27 @@ flowchart LR
 
 ## Modules
 
-| Module | What it does | Main connections |
-| --- | --- | --- |
-| **Clock** | Sets tempo and provides the timing pulse. | Clock out to sequencer clock and delay clock. |
-| **5-Step Sequencer** | Plays five editable notes, quantized by the selected scale and root. | Clock in; CV out to oscillator pitch; gate out to ADSR. |
-| **ADSR** | Shapes the amplitude envelope with attack, decay, sustain, and release controls. | Gate in; envelope out to VCA CV. |
-| **LFO** | Generates a low-frequency modulation signal with adjustable rate and depth. | Out to filter CV and/or oscillator FM. |
-| **Oscillator** | Generates sine, sawtooth, square, or triangle audio at an adjustable frequency. | V/oct and FM inputs; audio out. |
-| **Filter** | Selects low-pass, band-pass, or high-pass filtering with adjustable cutoff and resonance. | Audio in/out; CV input for modulation. |
-| **VCA** | Controls audio level and can be shaped by the ADSR envelope. Includes the waveform display. | Audio in/out; CV in. |
-| **Reverb** | Adds convolution reverb with adjustable size and wet mix. | Audio in/out. |
-| **Delay** | Adds feedback delay, with basic and ping-pong modes and clock synchronization. | Audio in/out; optional clock input. |
-| **Output** | Sets master volume and shows whether the output port is connected. | Final audio input. |
+| Module                  | What it does                                                                                                                     | Main connections                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Clock**               | Sets tempo and provides the timing pulse.                                                                                        | Clock out to sequencer clock and delay clock.                                                                                |
+| **5-Step Sequencer**    | Plays five editable notes, quantized by the selected scale and root.                                                             | Clock in; CV out to oscillator pitch; gate out to ADSR.                                                                      |
+| **ADSR**                | Shapes the amplitude envelope with attack, decay, and release times plus a sustain-level control.                                | Gate in; envelope out to VCA CV.                                                                                             |
+| **LFO**                 | Generates a low-frequency modulation signal with adjustable rate and depth.                                                      | Out to filter CV and/or oscillator FM.                                                                                       |
+| **Oscillator**          | Generates sine, sawtooth, square, or triangle audio at an adjustable frequency.                                                  | V/oct and FM inputs; audio out.                                                                                              |
+| **Filter**              | Selects low-pass, band-pass, or high-pass filtering with adjustable cutoff and resonance.                                        | Audio in/out; CV input for modulation.                                                                                       |
+| **VCA**                 | Controls audio level and can be shaped by the ADSR envelope. Includes the waveform display.                                      | Audio in/out; CV in.                                                                                                         |
+| **Reverb**              | Adds convolution reverb with adjustable size and wet mix.                                                                        | Audio in/out.                                                                                                                |
+| **Delay**               | Adds feedback delay, with basic and ping-pong modes and clock synchronization.                                                   | Audio in/out; optional clock input.                                                                                          |
+| **Noise**               | Selects white, pink, or brown noise and controls output gain with a dB readout.                                                  | Audio out.                                                                                                                   |
+| **Ring Modulator**      | Multiplies two audio signals to create sum-and-difference sidebands, with adjustable output gain.                                | A/B audio inputs; audio out.                                                                                                 |
+| **S&H**                 | Samples an input on each clock pulse, with input gain, offset, and slew controls.                                                | Signal and clock in; CV out.                                                                                                 |
+| **Wavefolder**          | Folds an input waveform with adjustable fold amount and symmetry for additive harmonics.                                         | Audio in/out.                                                                                                                |
+| **Attenuverter**        | Scales or inverts a signal and adds a bipolar offset.                                                                            | CV in/out.                                                                                                                   |
+| **Harmonic Oscillator** | Eight-partial additive oscillator with harmonic center/width sweep, balance tilt, per-partial levels, and linear/exponential FM. | V/oct, linear/exponential FM, center/width CV, eight level CV inputs; eight sine outputs, three core waveforms, and mix out. |
+| **8-Channel Mixer**     | Combines eight audio signals and displays a live dB meter for each channel.                                                      | Eight audio inputs; mix out.                                                                                                 |
+| **Cloudy**              | Granular processor with position, size, pitch, input gain, density, texture, feedback, blend, and freeze controls.               | Audio in/out; CV inputs for freeze, trigger, position, size, pitch, and blend.                                               |
+| **Spectral Phaser**     | Six-stage all-pass phaser interleaved with three moving resonant bands inspired by the HM-2's tonal character.                   | Audio in/out; CV inputs for rate, depth, resonance, feedback, mix, bands, sweep, and low/high modulation rates.              |
+| **Output**              | Sets master volume, shows a live dB meter, and indicates whether the output port is connected.                                   | Final audio input.                                                                                                           |
 
 ## Try it
 
@@ -91,7 +108,10 @@ flowchart LR
    opposite type. Click a connected port to remove its cable.
 4. Select **Clear All** to disconnect the patch.
 
-On mobile devices, rotate to landscape to use the rack; portrait orientation displays a prompt to rotate. Start with a comfortable device volume before raising the master level.
+On mobile devices, rotate to landscape to use the full rack; choose **Back to
+Performance View** for the compact view. Portrait orientation displays a prompt
+to rotate. Start with a comfortable device volume before raising the master
+level.
 
 ## Run locally
 
@@ -100,6 +120,7 @@ On mobile devices, rotate to landscape to use the rack; portrait orientation dis
 - [Node.js](https://nodejs.org/) **20.9 or later**
 - npm (included with Node.js)
 - A modern browser with Web Audio API support
+- AudioWorklet support for the Cloudy and Spectral Phaser modules
 
 ### Clone and install
 
@@ -151,3 +172,10 @@ src/
 ## License
 
 Copyright © Rita Silva. All rights reserved.
+
+The Cloudy panel layout is adapted from Mutable Instruments Clouds by Emilie
+Gillet and is licensed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+This adaptation is renamed Cloudy, uses this project's pastel styling, and
+simplifies the interface to the controls and mono ports supported by its audio
+engine. This notice applies to the Cloudy panel layout; the rest of the project
+retains the license stated above.
