@@ -392,7 +392,6 @@ export default function RackContainer() {
   const [isMobile, setIsMobile] = useState(false)
   const [isPortrait, setIsPortrait] = useState(false)
   const [mobileShowFullRack, setMobileShowFullRack] = useState(true)
-  const [mobilePatchReady, setMobilePatchReady] = useState(false)
   const [fitSize, setFitSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
@@ -2344,14 +2343,6 @@ export default function RackContainer() {
     [],
   )
 
-  // ── Mobile: auto-patch on landscape entry ─────────────────────────────────
-  useEffect(() => {
-    if (isMobile && !isPortrait && !mobilePatchReady) {
-      applyPatch(selectedPatchId)
-      setMobilePatchReady(true)
-    }
-  }, [isMobile, isPortrait, mobilePatchReady, applyPatch, selectedPatchId])
-
   // ── Port click ─────────────────────────────────────────────────────────────
   const handlePortClick = useCallback(
     (portId: PortId) => {
@@ -2649,12 +2640,12 @@ export default function RackContainer() {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
+          justifyContent: "safe center",
           padding: "1rem 1.5rem",
           userSelect: "none",
           boxSizing: "border-box",
+          overflowY: "auto",
         }}
-        onPointerDown={initAudio}
       >
         <span
           style={{
@@ -2714,11 +2705,30 @@ export default function RackContainer() {
         >
           {selectedPatch.description}
         </span>
+        <button
+          type="button"
+          onClick={doAutoPatch}
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: "9px",
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--ink)",
+            background: "var(--surface)",
+            border: "1px solid var(--line-strong)",
+            borderRadius: "4px",
+            padding: "8px 14px",
+          }}
+        >
+          auto patch
+        </button>
 
         {/* Mini patch SVG */}
         <svg
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           style={{
+            display: cables.length === 0 ? "none" : "block",
             width: "min(90vw, 480px)",
             height: "auto",
             overflow: "visible",
@@ -2877,13 +2887,13 @@ export default function RackContainer() {
             marginTop: "6px",
           }}
         >
-          {!mobilePatchReady
-            ? "loading..."
+          {cables.length === 0
+            ? "select auto patch to start"
             : audioRunning
               ? "playing"
               : "tap to enable sound"}
         </span>
-        {mobilePatchReady && !audioRunning && (
+        {cables.length > 0 && !audioRunning && (
           <button
             type="button"
             onClick={initAudio}

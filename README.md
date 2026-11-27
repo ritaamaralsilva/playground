@@ -120,10 +120,10 @@ Saved sequence presets use this browser's `localStorage` and remain available
 after a refresh. The song arrangement is currently held in the page session and
 does not persist after a refresh.
 
-On phones, rotate to landscape to use the compact performance view. Choose
-**Back to Performance View** to return to it from the full rack. Portrait mode
-prompts you to rotate. Start with a comfortable device volume before raising
-the master level.
+On phones, rotate to landscape and choose **Auto Patch** or a different preset
+to start playing. Choose **Back to Performance View** to switch from the full
+rack to the compact view. Portrait mode prompts you to rotate. Start with a
+comfortable device volume before raising the master level.
 
 ## Run locally
 
