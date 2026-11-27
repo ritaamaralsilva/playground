@@ -2,6 +2,9 @@ import type { PortDef } from "./types"
 
 export const ALL_PORT_DEFS: PortDef[] = [
   { id: "clock-out", label: "out", type: "output" },
+  { id: "clk-in", label: "in", type: "input" },
+  { id: "clk-div-out", label: "div", type: "output" },
+  { id: "clk-pulse-out", label: "pulse", type: "output" },
   { id: "seq-clock-in", label: "clk in", type: "input" },
   { id: "seq-cv-out", label: "cv out", type: "output" },
   { id: "seq-gate-out", label: "gate out", type: "output" },

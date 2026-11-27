@@ -16,6 +16,12 @@ import {
   SCALE_NAMES,
 } from "../engine/constants"
 import { formatGainDb, midiToHz } from "../engine/utils"
+import {
+  clampClockBpm,
+  createDefaultClockState,
+  getMasterIntervalMs,
+} from "../engine/clockEngine"
+import type { ClockState, ClockTickOutput } from "../engine/clockEngine"
 import { useSequencer } from "../engine/useSequencer"
 import {
   createNoiseBuffer,
@@ -154,6 +160,9 @@ export default function RackContainer() {
   const delayNormalMode = useRef<GainNode | null>(null)
   const delayPingPongMode = useRef<GainNode | null>(null)
   const adsrEnvGain = useRef<GainNode | null>(null)
+  const clockOutSource = useRef<ConstantSourceNode | null>(null)
+  const clockDivSource = useRef<ConstantSourceNode | null>(null)
+  const clockPulseSource = useRef<ConstantSourceNode | null>(null)
   const seqCvSource = useRef<ConstantSourceNode | null>(null)
   const seqGateSource = useRef<ConstantSourceNode | null>(null)
   const vcaOutBus = useRef<GainNode | null>(null)
@@ -234,6 +243,12 @@ export default function RackContainer() {
   const fitContentRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<number>(0)
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const clockStateRef = useRef<ClockState>(createDefaultClockState())
+  const clockResetPendingRef = useRef(false)
+  const clockInputAnalyser = useRef<AnalyserNode | null>(null)
+  const clockInputData = useRef(new Float32Array(32))
+  const clockInputHigh = useRef(false)
+  const lastExternalClockTick = useRef<number | null>(null)
   const adsrTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const graphSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const audioStarted = useRef(false)
@@ -419,6 +434,13 @@ export default function RackContainer() {
     (a: PortId, b: PortId) => cableMap[a] === b || cableMap[b] === a,
     [cableMap],
   )
+  const externalClockConnected = cables.some(
+    (cable) =>
+      cable.to === "clk-in" &&
+      cable.from !== "clock-out" &&
+      cable.from !== "clk-div-out" &&
+      cable.from !== "clk-pulse-out",
+  )
   const connectedPorts = new Set<PortId>(cables.flatMap((c) => [c.from, c.to]))
   const ppDelayTime = 60 / bpm / ppDivision
 
@@ -552,6 +574,21 @@ export default function RackContainer() {
     seqGate.offset.value = 0
     seqGate.start()
     seqGateSource.current = seqGate
+    const clockInput = ac.createAnalyser()
+    clockInput.fftSize = 32
+    clockInputAnalyser.current = clockInput
+    const clockOut = ac.createConstantSource()
+    clockOut.offset.value = 0
+    clockOut.start()
+    clockOutSource.current = clockOut
+    const clockDiv = ac.createConstantSource()
+    clockDiv.offset.value = 0
+    clockDiv.start()
+    clockDivSource.current = clockDiv
+    const clockPulse = ac.createConstantSource()
+    clockPulse.offset.value = 0
+    clockPulse.start()
+    clockPulseSource.current = clockPulse
 
     const filt = ac.createBiquadFilter()
     filt.type = filterType
@@ -1019,6 +1056,10 @@ export default function RackContainer() {
       const nodes: Array<AudioNode | null> = [
         osc,
         lfoGain.current,
+        clockOutSource.current,
+        clockDivSource.current,
+        clockPulseSource.current,
+        clockInputAnalyser.current,
         seqCvSource.current,
         seqGateSource.current,
         filt,
@@ -1324,6 +1365,9 @@ export default function RackContainer() {
       const outputNodes: Partial<Record<PortId, AudioNode | null>> = {
         "osc-out": osc,
         "lfo-out": lg,
+        "clock-out": clockOutSource.current,
+        "clk-div-out": clockDivSource.current,
+        "clk-pulse-out": clockPulseSource.current,
         "seq-cv-out": seqCvSource.current,
         "seq-gate-out": seqGateSource.current,
         "filter-audio-out": filt,
@@ -1390,6 +1434,7 @@ export default function RackContainer() {
         "harmonic-6-level-cv-in": harmonicLevelCvInputs.current[5],
         "harmonic-7-level-cv-in": harmonicLevelCvInputs.current[6],
         "harmonic-8-level-cv-in": harmonicLevelCvInputs.current[7],
+        "clk-in": clockInputAnalyser.current,
         "granular-audio-in-l": granularInputMerge,
         "granular-audio-in-r": granularInputMerge,
         "out-in-l": outputInputMerge,
@@ -1579,10 +1624,9 @@ export default function RackContainer() {
 
   // ── Sequencer ──────────────────────────────────────────────────────────────
   const sequencerClockTick = sequencer.clockTick
+  const dispatchSequencer = sequencer.dispatch
   const stepSeq = useCallback(() => {
     sequencerClockTick()
-    setClockBeat(true)
-    setTimeout(() => setClockBeat(false), 80)
   }, [sequencerClockTick])
 
   const handleSequencerOutput = useCallback(
@@ -1621,19 +1665,113 @@ export default function RackContainer() {
     [linked, triggerADSR],
   )
 
+  const handleClockStateChange = useCallback((state: ClockState) => {
+    clockStateRef.current = state
+  }, [])
+
+  const handleClockReset = useCallback(() => {
+    clockResetPendingRef.current = true
+  }, [])
+
+  // Audio-rate consumers should schedule edges with clockEngine helpers, not React callback timing.
+  const handleClockOutput = useCallback(
+    (output: ClockTickOutput) => {
+      const ac = ctx.current
+      if (!ac) return
+      const now = ac.currentTime
+      const emitPulse = (
+        source: ConstantSourceNode | null,
+        pulseWidth: number,
+        periodMs: number,
+      ) => {
+        if (!source) return
+        source.offset.cancelScheduledValues(now)
+        source.offset.setValueAtTime(1, now)
+        source.offset.setValueAtTime(
+          0,
+          now + Math.max(0.001, (periodMs * pulseWidth) / 100_000),
+        )
+      }
+
+      if (output.tick) {
+        emitPulse(
+          clockOutSource.current,
+          output.pulseWidth,
+          getMasterIntervalMs(bpm),
+        )
+      }
+      if (!output.divTick) return
+
+      const division = clockStateRef.current.division
+      const dividedPeriodMs = getMasterIntervalMs(bpm) / division
+      emitPulse(clockDivSource.current, 5, dividedPeriodMs)
+      emitPulse(clockPulseSource.current, output.pulseWidth, dividedPeriodMs)
+      if (linked("clk-div-out", "seq-clock-in")) stepSeq()
+      if (linked("clk-div-out", "sample-clock-in")) sampleAndHold()
+      if (linked("clk-pulse-out", "adsr-gate-in")) triggerADSR()
+    },
+    [bpm, linked, sampleAndHold, stepSeq, triggerADSR],
+  )
+
+  const pulseMasterClock = useCallback(
+    (externalTickTime?: number) => {
+      if (externalTickTime !== undefined) {
+        const previousTick = lastExternalClockTick.current
+        if (previousTick !== null && externalTickTime > previousTick) {
+          setBpm(clampClockBpm(60_000 / (externalTickTime - previousTick)))
+        }
+        lastExternalClockTick.current = externalTickTime
+      }
+      if (!ctx.current || !clockStateRef.current.running) return
+      if (clockResetPendingRef.current) {
+        dispatchSequencer({ type: "RESET_PHASE" })
+        clockResetPendingRef.current = false
+      }
+      setClockBeat(true)
+      setTimeout(() => setClockBeat(false), 80)
+      if (linked("clock-out", "seq-clock-in")) stepSeq()
+      if (linked("clock-out", "sample-clock-in")) sampleAndHold()
+    },
+    [dispatchSequencer, linked, sampleAndHold, stepSeq],
+  )
+
   // ── Clock interval ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (clockRef.current) clearInterval(clockRef.current)
+    if (externalClockConnected) return
     const interval = (60 / bpm) * 1000
-    clockRef.current = setInterval(() => {
-      if (!ctx.current) return
-      if (linked("clock-out", "seq-clock-in")) stepSeq()
-      if (linked("clock-out", "sample-clock-in")) sampleAndHold()
-    }, interval)
+    clockRef.current = setInterval(() => pulseMasterClock(), interval)
     return () => {
       if (clockRef.current) clearInterval(clockRef.current)
     }
-  }, [bpm, stepSeq, sampleAndHold, linked])
+  }, [bpm, externalClockConnected, pulseMasterClock])
+
+  useEffect(() => {
+    if (!externalClockConnected) {
+      clockInputHigh.current = false
+      lastExternalClockTick.current = null
+      return
+    }
+
+    const pollExternalClock = setInterval(() => {
+      const analyser = clockInputAnalyser.current
+      if (!ctx.current || !analyser) return
+      analyser.getFloatTimeDomainData(clockInputData.current)
+      let peak = 0
+      for (const sample of clockInputData.current) {
+        peak = Math.max(peak, Math.abs(sample))
+      }
+
+      if (!clockInputHigh.current && peak >= 0.5) {
+        clockInputHigh.current = true
+        pulseMasterClock(performance.now())
+      } else if (clockInputHigh.current && peak <= 0.2) {
+        clockInputHigh.current = false
+      }
+    }, 4)
+
+    return () => clearInterval(pollExternalClock)
+  }, [externalClockConnected, pulseMasterClock])
 
   // ── Param → audio sync ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -2842,6 +2980,9 @@ export default function RackContainer() {
               clockBeat={clockBeat}
               onBpmChange={setBpm}
               mkPort={mkPort}
+              onClockStateChange={handleClockStateChange}
+              onClockOut={handleClockOutput}
+              onReset={handleClockReset}
             />
             <SequencerModule
               seqStep={seqStep}

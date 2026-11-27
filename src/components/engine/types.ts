@@ -1,5 +1,8 @@
 export type PortId =
   | "clock-out"
+  | "clk-in"
+  | "clk-div-out"
+  | "clk-pulse-out"
   | "seq-clock-in"
   | "seq-cv-out"
   | "seq-gate-out"
