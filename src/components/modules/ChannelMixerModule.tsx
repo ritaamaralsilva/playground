@@ -11,18 +11,21 @@ interface ChannelMixerModuleProps {
   onLevelChange: (channel: number, level: number) => void
   onPanChange: (channel: number, pan: number) => void
   meters: Array<AnalyserNode | null>
-  mkPort: (def: PortDef) => React.ReactNode
+  mkPort: (
+    def: PortDef,
+    orientation?: "horizontal" | "vertical",
+  ) => React.ReactNode
 }
 
-const CHANNEL_INPUTS: Array<{ id: PortId; label: string }> = [
-  { id: "channel-1-in", label: "1" },
-  { id: "channel-2-in", label: "2" },
-  { id: "channel-3-in", label: "3" },
-  { id: "channel-4-in", label: "4" },
-  { id: "channel-5-in", label: "5" },
-  { id: "channel-6-in", label: "6" },
-  { id: "channel-7-in", label: "7" },
-  { id: "channel-8-in", label: "8" },
+const CHANNEL_INPUTS: PortId[] = [
+  "channel-1-in",
+  "channel-2-in",
+  "channel-3-in",
+  "channel-4-in",
+  "channel-5-in",
+  "channel-6-in",
+  "channel-7-in",
+  "channel-8-in",
 ]
 
 export function ChannelMixerModule({
@@ -46,7 +49,7 @@ export function ChannelMixerModule({
       >
         {CHANNEL_INPUTS.map((input, index) => (
           <div
-            key={input.id}
+            key={input}
             style={{
               display: "flex",
               flexDirection: "column",
@@ -65,35 +68,45 @@ export function ChannelMixerModule({
                 "0 2px 4px rgb(34 45 38 / 12%), inset 0 1px 0 rgb(255 255 255 / 78%)",
             }}
           >
-            <span
+            <div
               style={{
-                color: "var(--ink)",
-                fontFamily: "var(--font-sans)",
-                fontSize: "8px",
-                fontWeight: 700,
-                letterSpacing: "0.05em",
-                padding: "2px 6px",
-                borderRadius: "999px",
-                background:
-                  "color-mix(in srgb, var(--module-accent) 18%, white)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: "100%",
               }}
             >
-              CH {String(index + 1).padStart(2, "0")}
-            </span>
+              <span
+                style={{
+                  color: "var(--ink)",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: "8px",
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  padding: "2px 6px",
+                  borderRadius: "999px",
+                  background:
+                    "color-mix(in srgb, var(--module-accent) 18%, white)",
+                }}
+              >
+                CH {String(index + 1).padStart(2, "0")}
+              </span>
+              {mkPort({ id: input, label: "IN", type: "input" })}
+            </div>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "4px",
+                gap: "5px",
                 width: "100%",
               }}
             >
               <AudioMeter
                 analyser={meters[index] ?? null}
                 label={`Channel ${index + 1} level`}
-                width={30}
-                height={52}
+                width={34}
+                height={76}
               />
               <div
                 style={{
@@ -122,29 +135,49 @@ export function ChannelMixerModule({
                       ? "C"
                       : `${(pans[index] ?? 0) < 0 ? "L" : "R"}${Math.round(Math.abs(pans[index] ?? 0) * 100)}`
                   }
-                  size={16}
+                  size={18}
                   onChange={(value) => onPanChange(index, value)}
                 />
               </div>
             </div>
-            {mkPort({
-              id: input.id,
-              label: input.label,
-              type: "input",
-            })}
           </div>
         ))}
       </div>
-      <PortSection>
+      <PortSection
+        style={{
+          width: "calc(100% - 14px)",
+          alignItems: "center",
+          padding: "6px 12px",
+        }}
+      >
+        <span
+          style={{
+            color: "var(--module-accent)",
+            fontFamily: "var(--font-sans)",
+            fontSize: "8px",
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+          }}
+        >
+          STEREO MIX OUT
+        </span>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: "4px",
+            justifyItems: "center",
+            gap: "16px",
+            width: "100%",
           }}
         >
-          {mkPort({ id: "channel-mixer-out-l", label: "L OUT", type: "output" })}
-          {mkPort({ id: "channel-mixer-out-r", label: "R OUT", type: "output" })}
+          {mkPort(
+            { id: "channel-mixer-out-l", label: "L OUT", type: "output" },
+            "vertical",
+          )}
+          {mkPort(
+            { id: "channel-mixer-out-r", label: "R OUT", type: "output" },
+            "vertical",
+          )}
         </div>
       </PortSection>
     </ModuleFrontPanel>
