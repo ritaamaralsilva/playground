@@ -9,6 +9,7 @@ export interface KnobProps {
   label: string
   sublabel: string
   size?: number
+  scale?: "linear" | "log"
   onChange: (v: number) => void
 }
 
@@ -19,12 +20,16 @@ export function Knob({
   label,
   sublabel,
   size = 32,
+  scale = "linear",
   onChange,
 }: KnobProps) {
   const startY = useRef<number | null>(null)
   const startVal = useRef(value)
   const startScale = useRef(1)
-  const pct = (value - min) / (max - min)
+  const isLogarithmic = scale === "log" && min > 0 && max > min
+  const pct = isLogarithmic
+    ? Math.log(value / min) / Math.log(max / min)
+    : (value - min) / (max - min)
   const deg = pct * 270 - 135
 
   const onPointerDown = useCallback(
@@ -38,19 +43,30 @@ export function Knob({
       startScale.current =
         bounds && control?.offsetWidth ? bounds.width / control.offsetWidth : 1
     },
-    [value]
+    [value],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (startY.current === null) return
-      const delta =
-        ((startY.current - e.clientY) /
-          (140 * Math.max(startScale.current, 0.01))) *
-        (max - min)
+      const progressDelta =
+        (startY.current - e.clientY) /
+        (140 * Math.max(startScale.current, 0.01))
+      if (isLogarithmic) {
+        const range = Math.log(max / min)
+        const startProgress = Math.log(startVal.current / min) / range
+        const nextProgress = Math.max(
+          0,
+          Math.min(1, startProgress + progressDelta),
+        )
+        onChange(min * Math.exp(nextProgress * range))
+        return
+      }
+
+      const delta = progressDelta * (max - min)
       onChange(Math.max(min, Math.min(max, startVal.current + delta)))
     },
-    [min, max, onChange]
+    [min, max, onChange, isLogarithmic],
   )
 
   return (
@@ -91,7 +107,8 @@ export function Knob({
               color-mix(in srgb, var(--module-accent) 38%, #30223b)
             )
           `,
-          border: "2px solid color-mix(in srgb, var(--module-accent) 62%, #ffffff)",
+          border:
+            "2px solid color-mix(in srgb, var(--module-accent) 62%, #ffffff)",
           borderRadius: "25% 75% 58% 42% / 62% 31% 69% 38%",
           touchAction: "none",
           boxShadow: `
@@ -136,7 +153,8 @@ export function Knob({
             top: Math.max(4, size * 0.12),
             left: "50%",
             transform: "translateX(-50%)",
-            boxShadow: "0 1px 2px rgb(37 22 50 / 70%), 0 0 4px rgb(255 255 255 / 60%)",
+            boxShadow:
+              "0 1px 2px rgb(37 22 50 / 70%), 0 0 4px rgb(255 255 255 / 60%)",
             pointerEvents: "none",
           }}
         />

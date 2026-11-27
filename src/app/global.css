@@ -22,6 +22,15 @@
   --tone-reverb: #8d4ca8;
   --tone-delay: #9a741e;
   --tone-output: #ad3f68;
+  --tone-noise: #64737b;
+  --tone-ringmod: #765e9b;
+  --tone-samplehold: #a9753f;
+  --tone-wavefolder: #b45166;
+  --tone-attenuverter: #397d83;
+  --tone-harmonic: #b36d44;
+  --tone-channelmixer: #587d58;
+  --tone-granular: #5799c7;
+  --tone-spectralphaser: #bd6638;
 }
 
 html,
@@ -144,7 +153,8 @@ button:focus-visible {
   border: 1px solid rgb(12 16 19 / 72%);
   border-radius: 2px;
   background:
-    radial-gradient(ellipse 4px 2px at 8px 50%, #181d21 70%, transparent 76%) 0 0 / 44px 100% repeat-x,
+    radial-gradient(ellipse 4px 2px at 8px 50%, #181d21 70%, transparent 76%) 0
+      0 / 44px 100% repeat-x,
     linear-gradient(180deg, #7a858d, #3e474f);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
 }
@@ -158,6 +168,9 @@ button:focus-visible {
 }
 
 .module-panel {
+  box-sizing: border-box;
+  height: 488px;
+  min-height: 488px;
   overflow: hidden;
   color: var(--ink);
   background:
@@ -224,6 +237,77 @@ button:focus-visible {
 
 .module-panel[data-tone="output"] {
   --module-accent: var(--tone-output);
+}
+
+.module-panel[data-tone="noise"] {
+  --module-accent: var(--tone-noise);
+}
+
+.module-panel[data-tone="noise"] .module-panel__content {
+  padding-right: 8px;
+}
+
+.module-panel[data-tone="ringmod"] {
+  --module-accent: var(--tone-ringmod);
+}
+
+.module-panel[data-tone="samplehold"] {
+  --module-accent: var(--tone-samplehold);
+}
+
+.module-panel[data-tone="samplehold"] .module-panel__content {
+  padding-right: 8px;
+}
+
+.module-panel[data-tone="wavefolder"] {
+  --module-accent: var(--tone-wavefolder);
+}
+
+.module-panel[data-tone="attenuverter"] {
+  --module-accent: var(--tone-attenuverter);
+}
+
+.module-panel[data-tone="harmonic"] {
+  --module-accent: var(--tone-harmonic);
+}
+
+.module-panel[data-tone="channelmixer"] {
+  --module-accent: var(--tone-channelmixer);
+}
+
+.module-panel[data-tone="granular"] {
+  --module-accent: var(--tone-granular);
+  background:
+    radial-gradient(
+      ellipse at 18% 0%,
+      rgb(255 255 255 / 78%) 0 5%,
+      transparent 44%
+    ),
+    radial-gradient(
+      ellipse at 88% 100%,
+      color-mix(in srgb, var(--module-accent) 24%, #d8f2ff),
+      transparent 68%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--module-accent) 48%, #f5fcff),
+      color-mix(in srgb, var(--module-accent) 24%, #e1f3fc) 56%,
+      color-mix(in srgb, var(--module-accent) 18%, #afcfe0)
+    );
+  border-color: color-mix(in srgb, var(--module-accent) 55%, #66727a);
+}
+
+.module-panel[data-tone="spectralphaser"] {
+  --module-accent: var(--tone-spectralphaser);
+}
+
+.module-panel[data-tone="spectralphaser"] .module-panel__content {
+  min-height: 0;
+}
+
+.module-panel[data-tone="spectralphaser"] button:focus-visible {
+  outline: 2px solid var(--module-accent);
+  outline-offset: 2px;
 }
 
 .module-panel__header {
@@ -323,4 +407,55 @@ button:focus-visible {
     0 3px 8px color-mix(in srgb, var(--module-accent) 22%, transparent),
     inset 0 1px 0 rgb(255 255 255 / 68%),
     inset 0 -2px 3px rgb(32 39 45 / 12%);
+}
+
+.module-panel[data-tone="granular"] .module-port-section {
+  background:
+    radial-gradient(
+      ellipse at 18% 0%,
+      rgb(255 255 255 / 76%) 0 7%,
+      transparent 48%
+    ),
+    radial-gradient(
+      ellipse at 88% 100%,
+      color-mix(in srgb, var(--module-accent) 22%, #d5f1ff),
+      transparent 72%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--module-accent) 30%, #f6fcff),
+      color-mix(in srgb, var(--module-accent) 16%, #d9edf8)
+    );
+}
+
+.cloudy-freeze-button {
+  display: flex;
+  width: 48px;
+  height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 3px rgb(37 95 130 / 34%));
+  transition:
+    filter 140ms ease,
+    transform 140ms ease;
+}
+
+.cloudy-freeze-button:hover {
+  filter: drop-shadow(0 3px 5px rgb(37 95 130 / 42%));
+  transform: translateY(-1px) scale(1.04);
+}
+
+.cloudy-freeze-button:active {
+  transform: scale(0.94);
+}
+
+.cloudy-freeze-button:focus-visible {
+  border-radius: 50%;
+  outline: 2px solid #347da9;
+  outline-offset: 2px;
 }

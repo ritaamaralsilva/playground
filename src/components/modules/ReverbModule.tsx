@@ -24,7 +24,7 @@ export function ReverbModule({
         value={reverbSize}
         min={0.01}
         max={1}
-        label="tail"
+        label="decay"
         sublabel={`${(0.5 + reverbSize * 3.5).toFixed(1)}s`}
         onChange={onSizeChange}
       />
@@ -33,7 +33,7 @@ export function ReverbModule({
         min={0}
         max={1}
         label="mix"
-        sublabel={`${Math.round(reverbMix * 100)}%`}
+        sublabel={reverbMix.toFixed(2)}
         onChange={onMixChange}
       />
       <PortSection>

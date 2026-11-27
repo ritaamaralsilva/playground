@@ -109,10 +109,12 @@ export function DelayModule({
                   padding: "2px 5px",
                   borderRadius: "3px",
                   cursor: "pointer",
-                  background: ppDivision === d
-                    ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
-                    : "var(--surface-raised)",
-                  color: ppDivision === d ? "var(--module-accent)" : "var(--muted)",
+                  background:
+                    ppDivision === d
+                      ? "color-mix(in srgb, var(--module-accent) 16%, var(--surface))"
+                      : "var(--surface-raised)",
+                  color:
+                    ppDivision === d ? "var(--module-accent)" : "var(--muted)",
                   border:
                     ppDivision === d
                       ? "1px solid color-mix(in srgb, var(--module-accent) 48%, var(--line))"
@@ -146,14 +148,14 @@ export function DelayModule({
             {(60000 / bpm).toFixed(0)}ms @ {Math.round(bpm)} bpm
           </span>
         ) : (
-        <Knob
-          value={delayTime}
-          min={0.01}
-          max={2}
-          label="time"
-          sublabel={`${delayTime.toFixed(2)}s`}
-          onChange={onTimeChange}
-        />
+          <Knob
+            value={delayTime}
+            min={0.01}
+            max={2}
+            label="time"
+            sublabel={`${delayTime.toFixed(2)}s`}
+            onChange={onTimeChange}
+          />
         ))}
 
       <Knob
@@ -161,7 +163,7 @@ export function DelayModule({
         min={0}
         max={0.95}
         label="feedback"
-        sublabel={`${Math.round(delayFb * 100)}%`}
+        sublabel={`${delayFb.toFixed(2)}x`}
         onChange={onFbChange}
       />
       <Knob
@@ -169,7 +171,7 @@ export function DelayModule({
         min={0}
         max={1}
         label="mix"
-        sublabel={`${Math.round(delayMix * 100)}%`}
+        sublabel={delayMix.toFixed(2)}
         onChange={onMixChange}
       />
       <PortSection>

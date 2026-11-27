@@ -1,6 +1,7 @@
 import React from "react"
 import { Knob } from "../ui/Knob"
 import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
+import { formatGainDb } from "../engine/utils"
 import type { PortDef } from "../engine/types"
 
 interface VcaModuleProps {
@@ -23,7 +24,7 @@ export function VcaModule({
         min={0}
         max={1}
         label="level"
-        sublabel={`${Math.round(vcaLevel * 100)}%`}
+        sublabel={formatGainDb(vcaLevel)}
         onChange={onLevelChange}
       />
       <canvas
@@ -32,8 +33,10 @@ export function VcaModule({
         height={28}
         className="rounded"
         style={{
-          background: "color-mix(in srgb, var(--module-accent) 8%, var(--surface))",
-          border: "1px solid color-mix(in srgb, var(--module-accent) 36%, var(--line))",
+          background:
+            "color-mix(in srgb, var(--module-accent) 8%, var(--surface))",
+          border:
+            "1px solid color-mix(in srgb, var(--module-accent) 36%, var(--line))",
         }}
       />
       <PortSection>

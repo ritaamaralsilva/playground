@@ -8,6 +8,7 @@ export interface PortProps {
   cableColor?: string
   highlighted: boolean
   dragging: boolean
+  orientation?: "horizontal" | "vertical"
   onRef: (id: PortId, el: HTMLDivElement | null) => void
   onClick: (id: PortId) => void
 }
@@ -18,19 +19,25 @@ export function Port({
   cableColor,
   highlighted,
   dragging,
+  orientation = "horizontal",
   onRef,
   onClick,
 }: PortProps) {
   const isOut = def.type === "output"
+  const isVertical = orientation === "vertical"
 
   const activeColor = cableColor ?? "var(--module-accent)"
 
   return (
     <div
-      className="flex items-center"
+      className={`flex ${isVertical ? "flex-col" : "flex-row"} items-center`}
       style={{
-        justifyContent: isOut ? "flex-end" : "flex-start",
-        gap: "5px",
+        justifyContent: isVertical
+          ? "center"
+          : isOut
+            ? "flex-end"
+            : "flex-start",
+        gap: isVertical ? "2px" : "5px",
       }}
     >
       {/* Jack socket */}
@@ -48,13 +55,13 @@ export function Port({
           border: connected
             ? `2px solid ${activeColor}`
             : highlighted
-            ? "2px solid var(--module-accent)"
-            : "1px solid #30383f",
+              ? "2px solid var(--module-accent)"
+              : "1px solid #30383f",
           boxShadow: highlighted
             ? `0 0 7px color-mix(in srgb, var(--module-accent) 55%, transparent), inset 0 1px 2px rgb(0 0 0 / 45%)`
             : connected
-            ? `0 0 5px ${activeColor}88, inset 0 1px 2px rgb(0 0 0 / 45%)`
-            : "0 1px 2px rgb(0 0 0 / 40%), inset 0 1px 0 rgb(255 255 255 / 55%)",
+              ? `0 0 5px ${activeColor}88, inset 0 1px 2px rgb(0 0 0 / 45%)`
+              : "0 1px 2px rgb(0 0 0 / 40%), inset 0 1px 0 rgb(255 255 255 / 55%)",
           opacity: dragging && !highlighted && !connected ? 0.3 : 1,
           transition: "border-color 0.1s, box-shadow 0.1s",
         }}
@@ -81,9 +88,11 @@ export function Port({
           textTransform: "uppercase",
           color: connected ? "var(--ink)" : "var(--muted)",
           lineHeight: 1,
-          maxWidth: 44,
+          maxWidth: isVertical ? 42 : 44,
           overflow: "hidden",
           textOverflow: "ellipsis",
+          textAlign: "center",
+          whiteSpace: "nowrap",
         }}
       >
         {def.label}

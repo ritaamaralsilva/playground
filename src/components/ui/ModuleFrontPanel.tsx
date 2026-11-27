@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 
 export type ModuleTone =
   | "clock"
@@ -11,6 +11,15 @@ export type ModuleTone =
   | "reverb"
   | "delay"
   | "output"
+  | "noise"
+  | "ringmod"
+  | "samplehold"
+  | "wavefolder"
+  | "attenuverter"
+  | "harmonic"
+  | "channelmixer"
+  | "granular"
+  | "spectralphaser"
 
 export function ModuleFrontPanel({
   title,
@@ -29,7 +38,6 @@ export function ModuleFrontPanel({
       data-tone={tone}
       style={{
         width,
-        minHeight: 340,
         position: "relative",
         zIndex: 10,
       }}
@@ -58,7 +66,13 @@ export function ModuleFrontPanel({
   )
 }
 
-export function PortSection({ children }: { children: ReactNode }) {
+export function PortSection({
+  children,
+  style,
+}: {
+  children: ReactNode
+  style?: CSSProperties
+}) {
   return (
     <div
       className="module-port-section"
@@ -71,6 +85,7 @@ export function PortSection({ children }: { children: ReactNode }) {
         flexDirection: "column",
         gap: "6px",
         boxSizing: "border-box",
+        ...style,
       }}
     >
       {children}

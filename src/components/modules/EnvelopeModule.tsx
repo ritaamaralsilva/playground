@@ -1,6 +1,7 @@
 import React from "react"
 import { Knob } from "../ui/Knob"
 import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
+import { formatGainDb } from "../engine/utils"
 import type { PortDef } from "../engine/types"
 
 interface EnvelopeModuleProps {
@@ -49,7 +50,7 @@ export function EnvelopeModule({
         min={0}
         max={5}
         label="sustain"
-        sublabel={`${sustain.toFixed(2)}s`}
+        sublabel={formatGainDb(sustain)}
         onChange={onSustainChange}
       />
       <Knob

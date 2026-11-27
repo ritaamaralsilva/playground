@@ -1,5 +1,6 @@
 import React from "react"
 import { Knob } from "../ui/Knob"
+import { AudioMeter } from "../ui/AudioMeter"
 import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
 import { formatGainDb } from "../engine/utils"
 import type { PortDef } from "../engine/types"
@@ -7,6 +8,7 @@ import type { PortDef } from "../engine/types"
 interface MixerModuleProps {
   masterVol: number
   isActive: boolean
+  analyser: AnalyserNode | null
   onVolChange: (v: number) => void
   mkPort: (def: PortDef) => React.ReactNode
 }
@@ -14,6 +16,7 @@ interface MixerModuleProps {
 export function MixerModule({
   masterVol,
   isActive,
+  analyser,
   onVolChange,
   mkPort,
 }: MixerModuleProps) {
@@ -31,6 +34,12 @@ export function MixerModule({
           border:
             "1px solid color-mix(in srgb, var(--module-accent) 45%, var(--line))",
         }}
+      />
+      <AudioMeter
+        analyser={analyser}
+        label="Master output level"
+        width={44}
+        height={116}
       />
       <Knob
         value={masterVol}
