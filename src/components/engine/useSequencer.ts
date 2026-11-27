@@ -8,7 +8,7 @@ import {
   type Dispatch,
 } from "react"
 import { DEFAULT_PRESETS, createDefaultSequence } from "./sequencerTypes"
-import type { SequencerState, Step } from "./sequencerTypes"
+import type { SequencerState, SongEntry, Step } from "./sequencerTypes"
 import {
   advanceSequence,
   outputForStep,
@@ -50,6 +50,7 @@ export type SequencerAction =
   | { type: "SET_ROOT"; value: number }
   | { type: "LOAD_SEQUENCE"; value: SequencerState }
   | { type: "RESET" }
+  | { type: "RESET_PHASE" }
   | { type: "RANDOMIZE"; steps: Step[] }
   | { type: "ADVANCE"; randomIndex: number; randomGate: number }
   | { type: "GATE_OFF" }
@@ -58,6 +59,7 @@ interface SequencerRuntime {
   sequence: SequencerState
   cursor: StepCursor
   output: SequencerOutput
+  restartOnNextTick: boolean
 }
 
 export interface SequencerController {
@@ -69,11 +71,27 @@ export interface SequencerController {
   gateOff: () => void
   savePreset: (name: string) => void
   loadNextPreset: () => void
+  loadPreset: (source: "user" | "built-in", index: number) => void
   deleteLoadedPreset: () => void
   userPresets: SequencerState[]
   currentPresetName: string
+  currentPresetKey: string
   canDeleteLoadedPreset: boolean
   storageError: string | null
+  song: SongEntry[]
+  songPlayback: { playing: boolean; entryIndex: number; repeat: number }
+  addCurrentToSong: () => void
+  removeSongEntry: (index: number) => void
+  moveSongEntry: (index: number, direction: -1 | 1) => void
+  setSongRepeats: (index: number, repeats: number) => void
+  startSong: () => void
+  stopSong: () => void
+}
+
+type SongPlayback = {
+  playing: boolean
+  entryIndex: number
+  repeat: number
 }
 
 function copySequence(sequence: SequencerState): SequencerState {
@@ -89,6 +107,7 @@ function initialRuntime(sequence = createDefaultSequence()): SequencerRuntime {
     sequence: initialSequence,
     cursor: { index: 0, pingPongDirection: 1 },
     output: outputForStep(initialSequence, initialSequence.steps[0], false),
+    restartOnNextTick: false,
   }
 }
 
@@ -182,6 +201,17 @@ function sequencerReducer(
       return initialRuntime(action.value)
     case "RESET":
       return initialRuntime()
+    case "RESET_PHASE":
+      return {
+        ...state,
+        cursor: { index: 0, pingPongDirection: 1 },
+        output: outputForStep(
+          state.sequence,
+          state.sequence.steps[0],
+          false,
+        ),
+        restartOnNextTick: true,
+      }
     case "RANDOMIZE": {
       const sequence = {
           ...state.sequence,
@@ -191,6 +221,19 @@ function sequencerReducer(
       return updateCurrentOutput(state, sequence, false)
     }
     case "ADVANCE": {
+      if (state.restartOnNextTick) {
+        const firstStep = state.sequence.steps[0]
+        return {
+          ...state,
+          cursor: { index: 0, pingPongDirection: 1 },
+          output: outputForStep(
+            state.sequence,
+            firstStep,
+            firstStep.gate && action.randomGate < firstStep.prob,
+          ),
+          restartOnNextTick: false,
+        }
+      }
       const advanced = advanceSequence(
         state.sequence,
         state.cursor,
@@ -201,6 +244,7 @@ function sequencerReducer(
         sequence: state.sequence,
         cursor: advanced.cursor,
         output: advanced.output,
+        restartOnNextTick: false,
       }
     }
     case "GATE_OFF":
@@ -219,14 +263,30 @@ export function useSequencer(
     initialRuntime,
   )
   const [userPresets, setUserPresets] = useState(loadUserPresets)
+  const [song, setSong] = useState<SongEntry[]>([])
+  const [songPlayback, setSongPlayback] = useState<SongPlayback>({
+    playing: false,
+    entryIndex: -1,
+    repeat: 0,
+  })
   const [loadedPreset, setLoadedPreset] = useState<{
     source: "user" | "built-in"
     index: number
   } | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null)
   const hasCompletedInitialPresetLoad = useRef(false)
+  const nextSongEntryId = useRef(0)
+  const songPlaybackRef = useRef(songPlayback)
+  const songStepsInRepeat = useRef(0)
+  const songSequenceChangedClockDiv = useRef<number | null>(null)
+  const advanceRef = useRef<() => void>(() => {})
   const dividedTicks = useRef(0)
   const doubleTickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const updateSongPlayback = useCallback((next: SongPlayback) => {
+    songPlaybackRef.current = next
+    setSongPlayback(next)
+  }, [])
 
   useEffect(() => {
     if (!hasCompletedInitialPresetLoad.current) {
@@ -244,16 +304,69 @@ export function useSequencer(
       randomIndex: Math.random(),
       randomGate: Math.random(),
     })
-  }, [])
+    const playback = songPlaybackRef.current
+    if (!playback.playing) return
+
+    const currentEntry = song[playback.entryIndex]
+    if (!currentEntry) {
+      updateSongPlayback({ ...playback, playing: false })
+      return
+    }
+
+    const stepsPerRepeat =
+      runtime.sequence.direction === "pingpong"
+        ? Math.max(1, runtime.sequence.length * 2 - 2)
+        : runtime.sequence.length
+    songStepsInRepeat.current += 1
+    if (songStepsInRepeat.current < stepsPerRepeat) return
+    songStepsInRepeat.current = 0
+
+    if (playback.repeat < currentEntry.repeats) {
+      updateSongPlayback({ ...playback, repeat: playback.repeat + 1 })
+      return
+    }
+
+    const nextIndex = playback.entryIndex + 1
+    if (nextIndex >= song.length) {
+      updateSongPlayback({ ...playback, playing: false })
+      return
+    }
+
+    updateSongPlayback({
+      playing: true,
+      entryIndex: nextIndex,
+      repeat: 1,
+    })
+    setLoadedPreset(null)
+    songSequenceChangedClockDiv.current = song[nextIndex].sequence.clockDiv
+    dispatch({ type: "LOAD_SEQUENCE", value: song[nextIndex].sequence })
+    dispatch({ type: "RESET_PHASE" })
+  }, [
+    runtime.sequence.direction,
+    runtime.sequence.length,
+    setLoadedPreset,
+    song,
+    updateSongPlayback,
+  ])
+  useEffect(() => {
+    advanceRef.current = advance
+  }, [advance])
 
   const clockTick = useCallback(() => {
     const clockDiv = runtime.sequence.clockDiv
     if (clockDiv === 0.5) {
+      songSequenceChangedClockDiv.current = null
       advance()
+      if (
+        songSequenceChangedClockDiv.current !== null &&
+        songSequenceChangedClockDiv.current !== 0.5
+      ) {
+        return
+      }
       if (doubleTickTimeout.current) clearTimeout(doubleTickTimeout.current)
       doubleTickTimeout.current = setTimeout(() => {
         doubleTickTimeout.current = null
-        advance()
+        advanceRef.current()
       }, (60_000 / Math.max(1, bpm)) / 2)
       return
     }
@@ -350,6 +463,28 @@ export function useSequencer(
     dispatch({ type: "LOAD_SEQUENCE", value: DEFAULT_PRESETS[nextIndex] })
   }, [loadedPreset, userPresets])
 
+  const loadPreset = useCallback(
+    (source: "user" | "built-in", index: number) => {
+      const presets = source === "user" ? userPresets : DEFAULT_PRESETS
+      const preset = presets[index]
+      if (!preset) return
+      if (doubleTickTimeout.current) {
+        clearTimeout(doubleTickTimeout.current)
+        doubleTickTimeout.current = null
+      }
+      dividedTicks.current = 0
+      updateSongPlayback({
+        ...songPlaybackRef.current,
+        playing: false,
+      })
+      songStepsInRepeat.current = 0
+      setLoadedPreset({ source, index })
+      dispatch({ type: "LOAD_SEQUENCE", value: preset })
+      dispatch({ type: "RESET_PHASE" })
+    },
+    [dispatch, updateSongPlayback, userPresets],
+  )
+
   const deleteLoadedPreset = useCallback(() => {
     if (loadedPreset?.source !== "user") return
     const index = loadedPreset.index
@@ -365,12 +500,93 @@ export function useSequencer(
     setLoadedPreset(null)
   }, [loadedPreset, userPresets])
 
+  const addCurrentToSong = useCallback(() => {
+    if (songPlaybackRef.current.playing) return
+    const sequence = copySequence(runtime.sequence)
+    const id = nextSongEntryId.current++
+    const name = sequence.name?.trim() || `Sequence ${id + 1}`
+    setSong((entries) => [
+      ...entries,
+      {
+        id,
+        name,
+        sequence,
+        repeats: 1,
+      },
+    ])
+  }, [runtime.sequence])
+
+  const removeSongEntry = useCallback((index: number) => {
+    if (songPlaybackRef.current.playing) return
+    setSong((entries) => entries.filter((_, entryIndex) => entryIndex !== index))
+  }, [])
+
+  const moveSongEntry = useCallback(
+    (index: number, direction: -1 | 1) => {
+      if (songPlaybackRef.current.playing) return
+      setSong((entries) => {
+        const target = index + direction
+        if (index < 0 || target < 0 || index >= entries.length || target >= entries.length)
+          return entries
+        const reordered = [...entries]
+        ;[reordered[index], reordered[target]] = [
+          reordered[target],
+          reordered[index],
+        ]
+        return reordered
+      })
+    },
+    [],
+  )
+
+  const setSongRepeats = useCallback((index: number, repeats: number) => {
+    if (songPlaybackRef.current.playing) return
+    const boundedRepeats = Math.max(1, Math.min(99, Math.round(repeats)))
+    setSong((entries) =>
+      entries.map((entry, entryIndex) =>
+        entryIndex === index
+          ? { ...entry, repeats: boundedRepeats }
+          : entry,
+      ),
+    )
+  }, [])
+
+  const startSong = useCallback(() => {
+    if (song.length === 0) return
+    if (doubleTickTimeout.current) {
+      clearTimeout(doubleTickTimeout.current)
+      doubleTickTimeout.current = null
+    }
+    dividedTicks.current = 0
+    songStepsInRepeat.current = 0
+    updateSongPlayback({ playing: true, entryIndex: 0, repeat: 1 })
+    setLoadedPreset(null)
+    dispatch({ type: "LOAD_SEQUENCE", value: song[0].sequence })
+    dispatch({ type: "RESET_PHASE" })
+  }, [dispatch, song, updateSongPlayback])
+
+  const stopSong = useCallback(() => {
+    if (doubleTickTimeout.current) {
+      clearTimeout(doubleTickTimeout.current)
+      doubleTickTimeout.current = null
+    }
+    dividedTicks.current = 0
+    songStepsInRepeat.current = 0
+    updateSongPlayback({
+      ...songPlaybackRef.current,
+      playing: false,
+    })
+  }, [updateSongPlayback])
+
   const currentPresetName =
     loadedPreset?.source === "user"
       ? userPresets[loadedPreset.index]?.name ?? "User preset"
       : loadedPreset?.source === "built-in"
         ? DEFAULT_PRESETS[loadedPreset.index]?.name ?? "Built-in"
         : runtime.sequence.name ?? "Live"
+  const currentPresetKey = loadedPreset
+    ? `${loadedPreset.source}:${loadedPreset.index}`
+    : "live"
 
   return {
     sequence: runtime.sequence,
@@ -381,10 +597,20 @@ export function useSequencer(
     gateOff: () => dispatch({ type: "GATE_OFF" }),
     savePreset,
     loadNextPreset,
+    loadPreset,
     deleteLoadedPreset,
     userPresets,
     currentPresetName,
+    currentPresetKey,
     canDeleteLoadedPreset: loadedPreset?.source === "user",
     storageError,
+    song,
+    songPlayback,
+    addCurrentToSong,
+    removeSongEntry,
+    moveSongEntry,
+    setSongRepeats,
+    startSong,
+    stopSong,
   }
 }

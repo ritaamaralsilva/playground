@@ -9,6 +9,7 @@ import { midiName, quantizeToScale } from "../engine/utils"
 import type { PortDef } from "../engine/types"
 import type { SequencerController } from "../engine/useSequencer"
 import { useSequencer } from "../engine/useSequencer"
+import { DEFAULT_PRESETS } from "../engine/sequencerTypes"
 import type { SequencerState, Step } from "../engine/sequencerTypes"
 
 type StepMode = "pitch" | "gate" | "prob" | "ratchet" | "slide"
@@ -65,6 +66,12 @@ const buttonStyle: React.CSSProperties = {
   borderRadius: "3px",
   padding: "4px 7px",
   whiteSpace: "nowrap",
+}
+
+const songButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  fontSize: "8px",
+  padding: "2px 4px",
 }
 
 const MODES: StepMode[] = ["pitch", "gate", "prob", "ratchet", "slide"]
@@ -257,6 +264,13 @@ export function SequencerModule({
     setPresetName(`seq ${activeSequencer.userPresets.length + 2}`)
   }
 
+  const loadSelectedPreset = (key: string) => {
+    const [source, indexValue] = key.split(":")
+    if (source === "user" || source === "built-in") {
+      activeSequencer.loadPreset(source, Number(indexValue))
+    }
+  }
+
   const stepRow = sequence.steps.map((step, index) => {
     const knobRange =
       mode === "pitch"
@@ -322,6 +336,107 @@ export function SequencerModule({
     )
   })
 
+  const songRows = activeSequencer.song.map((entry, index) => {
+    const isCurrent =
+      activeSequencer.songPlayback.playing &&
+      activeSequencer.songPlayback.entryIndex === index
+    const disabled = activeSequencer.songPlayback.playing
+    return (
+      <div
+        key={entry.id}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "3px",
+          minWidth: 0,
+          minHeight: 19,
+          padding: "1px 3px",
+          borderRadius: 2,
+          background: isCurrent
+            ? "color-mix(in srgb, var(--module-accent) 15%, var(--surface))"
+            : "transparent",
+        }}
+      >
+        <span
+          title={entry.name}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontFamily: "var(--font-sans)",
+            fontSize: 8,
+            color: isCurrent ? "var(--module-accent)" : "var(--muted)",
+          }}
+        >
+          {index + 1}. {entry.name}
+        </span>
+        <button
+          type="button"
+          aria-label={`Move ${entry.name} up`}
+          disabled={disabled || index === 0}
+          onClick={() => activeSequencer.moveSongEntry(index, -1)}
+          style={songButtonStyle}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          aria-label={`Decrease ${entry.name} repeats`}
+          disabled={disabled || entry.repeats <= 1}
+          onClick={() =>
+            activeSequencer.setSongRepeats(index, entry.repeats - 1)
+          }
+          style={songButtonStyle}
+        >
+          −
+        </button>
+        <span
+          aria-label={`${entry.repeats} repeats`}
+          style={{
+            width: 18,
+            textAlign: "center",
+            fontFamily: "var(--font-sans)",
+            fontSize: 8,
+            color: "var(--muted)",
+          }}
+        >
+          {entry.repeats}×
+        </span>
+        <button
+          type="button"
+          aria-label={`Increase ${entry.name} repeats`}
+          disabled={disabled || entry.repeats >= 99}
+          onClick={() =>
+            activeSequencer.setSongRepeats(index, entry.repeats + 1)
+          }
+          style={songButtonStyle}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          aria-label={`Move ${entry.name} down`}
+          disabled={disabled || index === activeSequencer.song.length - 1}
+          onClick={() => activeSequencer.moveSongEntry(index, 1)}
+          style={songButtonStyle}
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          aria-label={`Remove ${entry.name} from song`}
+          disabled={disabled}
+          onClick={() => activeSequencer.removeSongEntry(index)}
+          style={songButtonStyle}
+        >
+          ×
+        </button>
+      </div>
+    )
+  })
+
   return (
     <ModuleFrontPanel title="8 STEP SEQUENCER" width={270} tone="sequencer">
       <div
@@ -331,7 +446,7 @@ export function SequencerModule({
           padding: "0 12px",
           display: "flex",
           flexDirection: "column",
-          gap: "10px",
+          gap: "6px",
         }}
       >
         <div
@@ -439,7 +554,7 @@ export function SequencerModule({
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: "8px 12px",
+            gap: "6px 12px",
             justifyItems: "center",
           }}
         >
@@ -578,20 +693,75 @@ export function SequencerModule({
           </button>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "4px",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <select
+            aria-label="Select sequence to load"
+            value={activeSequencer.currentPresetKey}
+            onChange={(event) => loadSelectedPreset(event.target.value)}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              padding: "3px 4px",
+              border: "1px solid var(--line)",
+              borderRadius: 3,
+              background: "var(--surface)",
+              color: "var(--muted)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 9,
+            }}
+          >
+            <option value="live" disabled>
+              Current sequence
+            </option>
+            {activeSequencer.userPresets.length > 0 && (
+              <optgroup label="Saved">
+                {activeSequencer.userPresets.map((preset, index) => (
+                  <option key={`user:${index}`} value={`user:${index}`}>
+                    {preset.name ?? `Sequence ${index + 1}`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Built-in">
+              {DEFAULT_PRESETS.map((preset, index) => (
+                <option key={`built-in:${index}`} value={`built-in:${index}`}>
+                  {preset.name ?? `Preset ${index + 1}`}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          <button
+            type="button"
+            onClick={activeSequencer.deleteLoadedPreset}
+            disabled={
+              !activeSequencer.canDeleteLoadedPreset ||
+              activeSequencer.songPlayback.playing
+            }
+            style={{
+              ...buttonStyle,
+              opacity:
+                activeSequencer.canDeleteLoadedPreset &&
+                !activeSequencer.songPlayback.playing
+                  ? 1
+                  : 0.45,
+              cursor:
+                activeSequencer.canDeleteLoadedPreset &&
+                !activeSequencer.songPlayback.playing
+                  ? "pointer"
+                  : "default",
+            }}
+          >
+            DEL
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <input
             aria-label="Preset name"
             value={presetName}
             onChange={(event) => setPresetName(event.target.value)}
             style={{
-              width: 76,
+              width: 130,
               minWidth: 0,
               boxSizing: "border-box",
               padding: "4px 5px",
@@ -606,30 +776,10 @@ export function SequencerModule({
           <button
             type="button"
             onClick={saveCurrentPreset}
+            disabled={activeSequencer.songPlayback.playing}
             style={buttonStyle}
           >
             SAVE
-          </button>
-          <button
-            type="button"
-            onClick={activeSequencer.loadNextPreset}
-            style={buttonStyle}
-          >
-            LOAD
-          </button>
-          <button
-            type="button"
-            onClick={activeSequencer.deleteLoadedPreset}
-            disabled={!activeSequencer.canDeleteLoadedPreset}
-            style={{
-              ...buttonStyle,
-              opacity: activeSequencer.canDeleteLoadedPreset ? 1 : 0.45,
-              cursor: activeSequencer.canDeleteLoadedPreset
-                ? "pointer"
-                : "default",
-            }}
-          >
-            DEL
           </button>
         </div>
         <div
@@ -644,6 +794,71 @@ export function SequencerModule({
         >
           {activeSequencer.storageError ??
             `${activeSequencer.currentPresetName}${activeSequencer.canDeleteLoadedPreset ? " · user" : ""}`}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "4px",
+          }}
+        >
+          <span style={labelStyle}>song</span>
+          <button
+            type="button"
+            onClick={activeSequencer.addCurrentToSong}
+            disabled={activeSequencer.songPlayback.playing}
+            style={songButtonStyle}
+          >
+            ADD CURRENT
+          </button>
+          <button
+            type="button"
+            onClick={
+              activeSequencer.songPlayback.playing
+                ? activeSequencer.stopSong
+                : activeSequencer.startSong
+            }
+            disabled={
+              !activeSequencer.songPlayback.playing &&
+              activeSequencer.song.length === 0
+            }
+            style={songButtonStyle}
+          >
+            {activeSequencer.songPlayback.playing ? "STOP SONG" : "PLAY SONG"}
+          </button>
+        </div>
+        <div
+          aria-label="Song sequence order"
+          style={{
+            width: "100%",
+            maxHeight: 58,
+            minHeight: 25,
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1px",
+            boxSizing: "border-box",
+            border: "1px solid var(--line)",
+            borderRadius: 3,
+            padding: "2px",
+          }}
+        >
+          {songRows.length > 0 ? (
+            songRows
+          ) : (
+            <span
+              style={{
+                padding: "5px 3px",
+                fontFamily: "var(--font-sans)",
+                fontSize: 8,
+                color: "var(--muted)",
+              }}
+            >
+              Add the current sequence to build a song.
+            </span>
+          )}
         </div>
       </div>
 

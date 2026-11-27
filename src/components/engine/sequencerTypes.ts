@@ -21,6 +21,13 @@ export type SequencerState = {
   name?: string
 }
 
+export type SongEntry = {
+  id: number
+  name: string
+  sequence: SequencerState
+  repeats: number
+}
+
 function createStep(
   note: number,
   overrides: Partial<Step> = {},
