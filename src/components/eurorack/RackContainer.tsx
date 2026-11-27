@@ -28,6 +28,7 @@ import {
   createWavefolderCurve,
 } from "../engine/audioModuleNodes"
 import { ALL_PORT_DEFS } from "../engine/portDefs"
+import { PATCH_PRESETS } from "../engine/patchPresets"
 import { Knob } from "../ui/Knob"
 import { Port } from "../ui/Port"
 import { ClockModule } from "../modules/ClockModule"
@@ -259,6 +260,10 @@ export default function RackContainer() {
 
   // ── Patch state ────────────────────────────────────────────────────────────
   const [cables, setCables] = useState<Cable[]>([])
+  const [selectedPatchId, setSelectedPatchId] = useState("clocked-voice")
+  const selectedPatch =
+    PATCH_PRESETS.find((preset) => preset.id === selectedPatchId) ??
+    PATCH_PRESETS[0]
   const cablesRef = useRef<Cable[]>([])
   const [dragging, setDragging] = useState<{
     portId: PortId
@@ -271,6 +276,8 @@ export default function RackContainer() {
   const [bpm, setBpm] = useState(120)
   const [clockBeat, setClockBeat] = useState(false)
   const sequencer = useSequencer(undefined, bpm)
+  const dispatchSequencer = sequencer.dispatch
+  const stopSequencerSong = sequencer.stopSong
   const seqStep = sequencer.activeStep
   const seqNotes = sequencer.sequence.steps.map((step) => step.note)
   const scaleIdx = Math.max(
@@ -1660,7 +1667,6 @@ export default function RackContainer() {
 
   // ── Sequencer ──────────────────────────────────────────────────────────────
   const sequencerClockTick = sequencer.clockTick
-  const dispatchSequencer = sequencer.dispatch
   const stepSeq = useCallback(() => {
     sequencerClockTick()
   }, [sequencerClockTick])
@@ -2290,40 +2296,46 @@ export default function RackContainer() {
     return () => window.removeEventListener("mousemove", onMove)
   }, [])
 
-  // ── Auto patch cables ──────────────────────────────────────────────────────
-  const AUTO_PATCH_CABLES: Cable[] = [
-    { from: "clock-out", to: "seq-clock-in", color: CABLE_COLORS[0] },
-    { from: "clock-out", to: "delay-clock-in", color: CABLE_COLORS[0] },
-    { from: "seq-cv-out", to: "osc-voct-in", color: CABLE_COLORS[1] },
-    { from: "osc-out", to: "filter-audio-in", color: CABLE_COLORS[2] },
-    { from: "lfo-out", to: "filter-cv-in", color: CABLE_COLORS[3] },
-    { from: "lfo-out", to: "osc-fm-in", color: CABLE_COLORS[3] },
-    { from: "filter-audio-out", to: "vca-audio-in", color: CABLE_COLORS[4] },
-    { from: "adsr-env-out", to: "vca-cv-in", color: CABLE_COLORS[5] },
-    { from: "seq-gate-out", to: "adsr-gate-in", color: CABLE_COLORS[6] },
-    { from: "vca-out", to: "reverb-audio-in-l", color: CABLE_COLORS[7] },
-    { from: "vca-out", to: "reverb-audio-in-r", color: CABLE_COLORS[7] },
-    {
-      from: "reverb-audio-out-l",
-      to: "delay-audio-in-l",
-      color: CABLE_COLORS[8],
+  // ── Auto patch presets ─────────────────────────────────────────────────────
+  const applyPatch = useCallback(
+    (patchId: string) => {
+      const preset = PATCH_PRESETS.find((candidate) => candidate.id === patchId)
+      if (!preset) {
+        setPatchError("The selected sound preset is unavailable.")
+        return
+      }
+
+      initAudio()
+      cablesRef.current = preset.cables
+      setCables(preset.cables)
+      setSelectedPatchId(preset.id)
+      setColorIdx(0)
+      setDragging(null)
+      if (preset.sequence) {
+        stopSequencerSong()
+        dispatchSequencer({
+          type: "LOAD_SEQUENCE",
+          value: preset.sequence,
+        })
+      }
+      if (preset.channelPans) setChannelPans([...preset.channelPans])
+      if (preset.modulation) {
+        setLfoRate(preset.modulation.lfoRate)
+        setLfoDepth(preset.modulation.lfoDepth)
+        setHarmonicCenterCvDepth(preset.modulation.harmonicCenterCvDepth)
+        setHarmonicWidthCvDepth(preset.modulation.harmonicWidthCvDepth)
+        setHarmonicExponentialFmAmount(
+          preset.modulation.harmonicExponentialFmAmount,
+        )
+      }
+      syncGraph(preset.cables)
     },
-    {
-      from: "reverb-audio-out-r",
-      to: "delay-audio-in-r",
-      color: CABLE_COLORS[8],
-    },
-    { from: "delay-audio-out-l", to: "out-in-l", color: CABLE_COLORS[9] },
-    { from: "delay-audio-out-r", to: "out-in-r", color: CABLE_COLORS[9] },
-  ]
+    [dispatchSequencer, initAudio, stopSequencerSong, syncGraph],
+  )
 
   const doAutoPatch = useCallback(() => {
-    initAudio()
-    cablesRef.current = AUTO_PATCH_CABLES
-    setCables(AUTO_PATCH_CABLES)
-    setColorIdx(0)
-    syncGraph(AUTO_PATCH_CABLES)
-  }, [initAudio, syncGraph]) // eslint-disable-line
+    applyPatch(selectedPatchId)
+  }, [applyPatch, selectedPatchId])
 
   useEffect(
     () => () => {
@@ -2335,10 +2347,10 @@ export default function RackContainer() {
   // ── Mobile: auto-patch on landscape entry ─────────────────────────────────
   useEffect(() => {
     if (isMobile && !isPortrait && !mobilePatchReady) {
-      doAutoPatch()
+      applyPatch(selectedPatchId)
       setMobilePatchReady(true)
     }
-  }, [isMobile, isPortrait, mobilePatchReady, doAutoPatch])
+  }, [isMobile, isPortrait, mobilePatchReady, applyPatch, selectedPatchId])
 
   // ── Port click ─────────────────────────────────────────────────────────────
   const handlePortClick = useCallback(
@@ -2534,63 +2546,78 @@ export default function RackContainer() {
 
   // ── MOBILE: Landscape — compact performance view ─────────────────────────
   if (isMobile && !isPortrait && !mobileShowFullRack) {
-    // mini patch view (modules + cables) from actual patch
-    // Rack layout for auto-patch: CLK → SEQ → OSCILLATOR → FILTER → VCA → REVERB → DELAY → AUDIO OUT
-    const MINI_MODULES = [
+    const MODULE_CATALOG = [
       { id: "clock", label: "clock", tone: "clock" },
       { id: "seq", label: "seq", tone: "sequencer" },
-      { id: "osc", label: "oscillator", tone: "oscillator" },
-      { id: "filter", label: "filt", tone: "filter" },
+      { id: "osc", label: "osc", tone: "oscillator" },
+      { id: "harmonic", label: "harmonic", tone: "harmonic" },
+      { id: "noise", label: "noise", tone: "noise" },
+      { id: "ring", label: "ring", tone: "ringmod" },
+      { id: "fold", label: "fold", tone: "wavefolder" },
+      { id: "filter", label: "filter", tone: "filter" },
       { id: "vca", label: "vca", tone: "vca" },
-      { id: "reverb", label: "rvb", tone: "reverb" },
-      { id: "delay", label: "dly", tone: "delay" },
+      { id: "cloudy", label: "cloudy", tone: "granular" },
+      { id: "phaser", label: "phaser", tone: "spectralphaser" },
+      { id: "reverb", label: "reverb", tone: "reverb" },
+      { id: "delay", label: "delay", tone: "delay" },
+      { id: "mixer", label: "mixer", tone: "channelmixer" },
       { id: "out", label: "audio out", tone: "output" },
-    ]
-    // cable colour mapping for mini patch view (matches auto-patch cables)
-    const cableColorMap: Record<string, string> = {
-      "clock-out-seq-clock-in": CABLE_COLORS[0],
-      "clock-out-delay-clock-in": CABLE_COLORS[0],
-      "seq-cv-out-osc-voct-in": CABLE_COLORS[1],
-      "osc-out-filter-audio-in": CABLE_COLORS[2],
-      "lfo-out-filter-cv-in": CABLE_COLORS[3],
-      "lfo-out-osc-fm-in": CABLE_COLORS[3],
-      "filter-audio-out-vca-audio-in": CABLE_COLORS[4],
-      "adsr-env-out-vca-cv-in": CABLE_COLORS[5],
-      "seq-gate-out-adsr-gate-in": CABLE_COLORS[6],
-      "vca-out-reverb-audio-in-l": CABLE_COLORS[7],
-      "vca-out-reverb-audio-in-r": CABLE_COLORS[7],
-      "reverb-audio-out-l-delay-audio-in-l": CABLE_COLORS[8],
-      "reverb-audio-out-r-delay-audio-in-r": CABLE_COLORS[8],
-      "delay-audio-out-l-out-in-l": CABLE_COLORS[9],
-      "delay-audio-out-r-out-in-r": CABLE_COLORS[9],
+    ] as const
+    const moduleIdForPort = (portId: PortId) => {
+      if (portId.startsWith("clock-") || portId.startsWith("clk-"))
+        return "clock"
+      if (portId.startsWith("seq-")) return "seq"
+      if (portId.startsWith("adsr-")) return "adsr"
+      if (portId.startsWith("lfo-")) return "lfo"
+      if (portId.startsWith("osc-")) return "osc"
+      if (portId.startsWith("harmonic-")) return "harmonic"
+      if (portId.startsWith("noise-")) return "noise"
+      if (portId.startsWith("ring-")) return "ring"
+      if (portId.startsWith("wavefolder-")) return "fold"
+      if (portId.startsWith("filter-")) return "filter"
+      if (portId.startsWith("vca-")) return "vca"
+      if (portId.startsWith("granular-")) return "cloudy"
+      if (portId.startsWith("spectral-phaser-")) return "phaser"
+      if (portId.startsWith("reverb-")) return "reverb"
+      if (portId.startsWith("delay-")) return "delay"
+      if (portId.startsWith("channel-")) return "mixer"
+      if (portId.startsWith("out-in-")) return "out"
+      return null
     }
-    // derive cables for mini patch view from actual cables, using colour mapping above
-    const miniCables = cables
-      .filter((c) => {
-        const key1 = `${c.from}-${c.to}`
-        const key2 = `${c.to}-${c.from}`
-        return cableColorMap[key1] || cableColorMap[key2]
-      })
-      .map((c) => {
-        const key1 = `${c.from}-${c.to}`
-        const key2 = `${c.to}-${c.from}`
-        return {
-          from: c.from.split("-")[0], // get module id from port id
-          to: c.to.split("-")[0],
-          color: cableColorMap[key1] || cableColorMap[key2] || "var(--surface)",
-        }
-      })
+    const miniCables = cables.flatMap((cable) => {
+      const from = moduleIdForPort(cable.from)
+      const to = moduleIdForPort(cable.to)
+      return from && to ? [{ from, to, color: cable.color }] : []
+    })
+    const SIDECHAIN_IDS = new Set(["lfo", "adsr"])
+    const visibleModuleIds = new Set(
+      miniCables
+        .flatMap((cable) => [cable.from, cable.to])
+        .filter((moduleId) => !SIDECHAIN_IDS.has(moduleId)),
+    )
+    const MINI_MODULES = MODULE_CATALOG.filter((module) =>
+      visibleModuleIds.has(module.id),
+    )
 
     // SVG layout constants
     const BOX_W = 38
     const BOX_H = 24
     const GAP = 16
-    const boxWidths = MINI_MODULES.map((mod) =>
-      mod.id === "osc" ? 52 : mod.id === "out" ? 50 : BOX_W,
+    const boxWidthOverrides: Partial<Record<string, number>> = {
+      harmonic: 54,
+      cloudy: 46,
+      phaser: 44,
+      mixer: 44,
+      out: 50,
+    }
+    const boxWidths = MINI_MODULES.map(
+      (module) => boxWidthOverrides[module.id] ?? BOX_W,
     )
-    const SVG_W =
+    const SVG_W = Math.max(
+      100,
       boxWidths.reduce((total, width) => total + width, 0) +
-      (boxWidths.length - 1) * GAP
+        (boxWidths.length - 1) * GAP,
+    )
     const SVG_H = 90
     const BOX_Y = 30 // y position of module boxes
     const PORT_Y = BOX_Y + BOX_H // bottom port y
@@ -2604,11 +2631,14 @@ export default function RackContainer() {
     // Module index lookup
     const modIndex = (id: string) => MINI_MODULES.findIndex((m) => m.id === id)
 
-    // Separate sidechain cables (LFO→filter, ADSR→vca, seq-gate→adsr)
-    // from main chain cables so we can draw them differently
-    const SIDECHAIN_IDS = new Set(["lfo", "adsr"])
-    const mainCables = miniCables.filter((c) => !SIDECHAIN_IDS.has(c.from))
-    const sidechainCables = miniCables.filter((c) => SIDECHAIN_IDS.has(c.from))
+    const mainCables = miniCables.filter(
+      (cable) =>
+        !SIDECHAIN_IDS.has(cable.from) && !SIDECHAIN_IDS.has(cable.to),
+    )
+    const sidechainCables = miniCables.filter(
+      (cable) =>
+        SIDECHAIN_IDS.has(cable.from) && !SIDECHAIN_IDS.has(cable.to),
+    )
 
     return (
       <div
@@ -2645,10 +2675,44 @@ export default function RackContainer() {
             color: "var(--accent-primary)",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
-            marginBottom: "18px",
+            marginBottom: "7px",
           }}
         >
-          preset — auto patch
+          preset — {selectedPatch.name}
+        </span>
+        <select
+          aria-label="Auto Patch preset"
+          value={selectedPatchId}
+          onChange={(event) => applyPatch(event.currentTarget.value)}
+          style={{
+            maxWidth: "82vw",
+            fontFamily: "var(--font-sans)",
+            fontSize: "9px",
+            color: "var(--ink)",
+            background: "var(--surface)",
+            border: "1px solid var(--line-strong)",
+            borderRadius: "4px",
+            padding: "5px 8px",
+            marginBottom: "4px",
+          }}
+        >
+          {PATCH_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name}
+            </option>
+          ))}
+        </select>
+        <span
+          style={{
+            maxWidth: "82vw",
+            fontFamily: "var(--font-mono)",
+            fontSize: "7px",
+            color: "var(--muted)",
+            textAlign: "center",
+            marginBottom: "8px",
+          }}
+        >
+          {selectedPatch.description}
         </span>
 
         {/* Mini patch SVG */}
@@ -3309,7 +3373,31 @@ export default function RackContainer() {
                 : `${cables.length} cable${cables.length !== 1 ? "s" : ""} patched`}
           </span>
           <div className="flex gap-2" style={{ marginTop: "16px" }}>
+            <select
+              aria-label="Auto Patch preset"
+              value={selectedPatchId}
+              onChange={(event) => applyPatch(event.currentTarget.value)}
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "9px",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                color: "var(--ink)",
+                background: "var(--surface)",
+                border: "1px solid var(--line)",
+                borderRadius: "4px",
+                padding: "6px 8px",
+                cursor: "pointer",
+              }}
+            >
+              {PATCH_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
             <button
+              type="button"
               onClick={() => {
                 cablesRef.current = []
                 setCables([])
@@ -3356,6 +3444,7 @@ export default function RackContainer() {
               clear all
             </button>
             <button
+              type="button"
               onClick={doAutoPatch}
               onMouseEnter={() => setBtnHover("patch")}
               onMouseLeave={() => {

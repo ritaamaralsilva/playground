@@ -18,8 +18,14 @@ Created by Rita Silva as a web-based companion to
 
 ## Make a patch your own
 
-- **Get started instantly.** Auto Patch connects a playable clock, sequencer,
-  synth voice, modulation, stereo effects, and output.
+- **Get started instantly.** Choose from six Auto Patch chains: Clocked Voice,
+  Harmonic Phaser, Granular Drift, Metallic Fold, Stereo Mixer, and Harmonica.
+  Each explores a different combination of sources, modulation, and stereo
+  effects.
+- **Explore Harmonica.** Hear all eight harmonics separately panned across the
+  stereo mixer, playing an original E-minor sequence through the Spectral
+  Phaser, Cloudy, reverb, and delay. Clock, Sample & Hold, and LFO signals add
+  rhythmic modulation.
 - **Patch by hand.** Connect color-coded ports to re-route audio and control
   signals across the rack.
 - **Write evolving patterns.** Shape eight steps with pitch, gate length,
@@ -99,13 +105,14 @@ AudioWorklet processors handle synthesis and processing.
 
 ## Start playing
 
-1. Select **Auto Patch** to connect the example patch and initialize browser
-   audio. Browsers require a user gesture before audio can start.
+1. Choose a sound chain from the **Auto Patch preset** menu. Selecting one
+   loads its signal path; the **Auto Patch** button reapplies the selected
+   chain. Browsers require a user gesture before audio can start.
 2. Turn the knobs, change the filter or effect modes, and adjust the sequencer.
 3. To create a patch, click an output port and then a compatible input port.
    Click a connected port to remove its cable.
-4. Choose **Clear All** to disconnect the current patch, or **Auto Patch** to
-   restore the playable example.
+4. Choose **Clear All** to disconnect the current patch, or select an Auto
+   Patch preset to explore another signal chain.
 5. To build a song, save or load a sequence, choose **Add Current**, set each
    entry's repeat count, arrange the order, then choose **Play Song**.
 
@@ -135,8 +142,8 @@ npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), then choose **Auto Patch**
-or connect a port to initialize audio.
+Open [http://localhost:3000](http://localhost:3000), choose an Auto Patch
+preset, or connect a port to initialize audio.
 
 ### Production build
 
