@@ -1,6 +1,6 @@
 import React from "react"
 import { Knob } from "../ui/Knob"
-import { ModuleFrontPanel, PortSection } from "../ui/ModuleFrontPanel"
+import { ModuleFrontPanel } from "../ui/ModuleFrontPanel"
 import type { PortDef, ReverbMode } from "../engine/types"
 
 interface ReverbModuleProps {
@@ -16,7 +16,10 @@ interface ReverbModuleProps {
   onCharacterChange: (v: number) => void
   onModeChange: (mode: ReverbMode) => void
   onReverseToggle: () => void
-  mkPort: (def: PortDef) => React.ReactNode
+  mkPort: (
+    def: PortDef,
+    orientation?: "horizontal" | "vertical",
+  ) => React.ReactNode
 }
 
 const REVERB_MODES: { value: ReverbMode; label: string }[] = [
@@ -75,7 +78,8 @@ export function ReverbModule({
           aria-label="Reverb mode"
           value={reverbMode}
           onChange={(event) => {
-            if (isReverbMode(event.target.value)) onModeChange(event.target.value)
+            if (isReverbMode(event.target.value))
+              onModeChange(event.target.value)
           }}
           style={{
             width: "100%",
@@ -150,6 +154,7 @@ export function ReverbModule({
         style={{
           minHeight: 24,
           width: "100%",
+          marginTop: 6,
           padding: "3px 4px",
           border: reverbReverse
             ? "1px solid var(--module-accent)"
@@ -168,20 +173,110 @@ export function ReverbModule({
       >
         {reverbReverse ? "reverse on" : "reverse off"}
       </button>
-      <PortSection>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 10,
+          width: "100%",
+          marginTop: "auto",
+          marginBottom: 8,
+        }}
+      >
         <div
+          role="group"
+          aria-label="Reverb stereo inputs"
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: "4px",
+            width: "calc(100% - 8px)",
+            padding: "6px 4px 5px",
+            boxSizing: "border-box",
+            border:
+              "1px solid color-mix(in srgb, var(--module-accent) 55%, #68737b)",
+            borderRadius: "18px 7px 15px 9px / 11px 18px 8px 15px",
+            background:
+              "linear-gradient(145deg, color-mix(in srgb, var(--module-accent) 24%, white), color-mix(in srgb, var(--module-accent) 12%, #dce1e4))",
+            boxShadow:
+              "inset 0 1px 0 rgb(255 255 255 / 70%), 0 2px 5px rgb(0 0 0 / 12%)",
           }}
         >
-          {mkPort({ id: "reverb-audio-in-l", label: "L IN", type: "input" })}
-          {mkPort({ id: "reverb-audio-in-r", label: "R IN", type: "input" })}
-          {mkPort({ id: "reverb-audio-out-l", label: "L OUT", type: "output" })}
-          {mkPort({ id: "reverb-audio-out-r", label: "R OUT", type: "output" })}
+          <div
+            style={{
+              marginBottom: 5,
+              fontSize: 7,
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textAlign: "center",
+              color: "var(--module-accent)",
+            }}
+          >
+            INPUT
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              justifyItems: "center",
+              gap: 2,
+            }}
+          >
+            {mkPort(
+              { id: "reverb-audio-in-l", label: "L IN", type: "input" },
+              "vertical",
+            )}
+            {mkPort(
+              { id: "reverb-audio-in-r", label: "R IN", type: "input" },
+              "vertical",
+            )}
+          </div>
         </div>
-      </PortSection>
+        <div
+          role="group"
+          aria-label="Reverb stereo outputs"
+          style={{
+            width: "calc(100% - 8px)",
+            padding: "6px 4px 5px",
+            boxSizing: "border-box",
+            border:
+              "1px solid color-mix(in srgb, var(--module-accent) 55%, #68737b)",
+            borderRadius: "7px 18px 9px 15px / 18px 10px 15px 8px",
+            background:
+              "linear-gradient(215deg, color-mix(in srgb, var(--module-accent) 24%, white), color-mix(in srgb, var(--module-accent) 12%, #dce1e4))",
+            boxShadow:
+              "inset 0 1px 0 rgb(255 255 255 / 70%), 0 2px 5px rgb(0 0 0 / 12%)",
+          }}
+        >
+          <div
+            style={{
+              marginBottom: 5,
+              fontSize: 7,
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textAlign: "center",
+              color: "var(--module-accent)",
+            }}
+          >
+            OUTPUT
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              justifyItems: "center",
+              gap: 2,
+            }}
+          >
+            {mkPort(
+              { id: "reverb-audio-out-l", label: "L OUT", type: "output" },
+              "vertical",
+            )}
+            {mkPort(
+              { id: "reverb-audio-out-r", label: "R OUT", type: "output" },
+              "vertical",
+            )}
+          </div>
+        </div>
+      </div>
     </ModuleFrontPanel>
   )
 }
