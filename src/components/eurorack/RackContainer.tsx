@@ -15,7 +15,8 @@ import {
   WAVEFORMS,
   SCALE_NAMES,
 } from "../engine/constants"
-import { formatGainDb, midiToHz, quantizeToScale } from "../engine/utils"
+import { formatGainDb, midiToHz } from "../engine/utils"
+import { useSequencer } from "../engine/useSequencer"
 import {
   createNoiseBuffer,
   createWavefolderCurve,
@@ -153,7 +154,8 @@ export default function RackContainer() {
   const delayNormalMode = useRef<GainNode | null>(null)
   const delayPingPongMode = useRef<GainNode | null>(null)
   const adsrEnvGain = useRef<GainNode | null>(null)
-  const seqCvGain = useRef<GainNode | null>(null)
+  const seqCvSource = useRef<ConstantSourceNode | null>(null)
+  const seqGateSource = useRef<ConstantSourceNode | null>(null)
   const vcaOutBus = useRef<GainNode | null>(null)
 
   // ── Buchla-inspired module nodes ──────────────────────────────────────────
@@ -232,7 +234,6 @@ export default function RackContainer() {
   const fitContentRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<number>(0)
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const seqStepRef = useRef(0)
   const adsrTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const graphSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const audioStarted = useRef(false)
@@ -254,11 +255,14 @@ export default function RackContainer() {
   // ── Module state ───────────────────────────────────────────────────────────
   const [bpm, setBpm] = useState(120)
   const [clockBeat, setClockBeat] = useState(false)
-  const [seqStep, setSeqStep] = useState(0)
-  const [seqNotes, setSeqNotes] = useState([48, 52, 55, 60, 63])
-  const seqNotesRef = useRef(seqNotes)
-  const [scaleIdx, setScaleIdx] = useState(2)
-  const [rootIdx, setRootIdx] = useState(0)
+  const sequencer = useSequencer(undefined, bpm)
+  const seqStep = sequencer.activeStep
+  const seqNotes = sequencer.sequence.steps.map((step) => step.note)
+  const scaleIdx = Math.max(
+    0,
+    SCALE_NAMES.indexOf(sequencer.sequence.scale),
+  )
+  const rootIdx = sequencer.sequence.root
   const [lfoRate, setLfoRate] = useState(0) // lfo inicia com freq a 0Hz
   const [lfoDepth, setLfoDepth] = useState(0) // lfo inicia com depth a 0
   const [oscFreq, setOscFreq] = useState(440)
@@ -540,9 +544,14 @@ export default function RackContainer() {
     lfo.connect(lg)
     lfoGain.current = lg
 
-    const scg = ac.createGain()
-    scg.gain.value = 0
-    seqCvGain.current = scg
+    const seqCv = ac.createConstantSource()
+    seqCv.offset.value = 0
+    seqCv.start()
+    seqCvSource.current = seqCv
+    const seqGate = ac.createConstantSource()
+    seqGate.offset.value = 0
+    seqGate.start()
+    seqGateSource.current = seqGate
 
     const filt = ac.createBiquadFilter()
     filt.type = filterType
@@ -1010,7 +1019,8 @@ export default function RackContainer() {
       const nodes: Array<AudioNode | null> = [
         osc,
         lfoGain.current,
-        seqCvGain.current,
+        seqCvSource.current,
+        seqGateSource.current,
         filt,
         vca,
         env,
@@ -1314,6 +1324,8 @@ export default function RackContainer() {
       const outputNodes: Partial<Record<PortId, AudioNode | null>> = {
         "osc-out": osc,
         "lfo-out": lg,
+        "seq-cv-out": seqCvSource.current,
+        "seq-gate-out": seqGateSource.current,
         "filter-audio-out": filt,
         "vca-out": vcaBus,
         "reverb-audio-out-l": revOutputSplit,
@@ -1566,50 +1578,48 @@ export default function RackContainer() {
   }, [])
 
   // ── Sequencer ──────────────────────────────────────────────────────────────
+  const sequencerClockTick = sequencer.clockTick
   const stepSeq = useCallback(() => {
-    setSeqStep((prev) => {
-      const next = (prev + 1) % 5
-      seqStepRef.current = next
-      if (
-        ctx.current &&
-        (linked("seq-cv-out", "osc-voct-in") ||
-          linked("seq-cv-out", "harmonic-v-oct-in"))
-      ) {
-        const quantized = quantizeToScale(
-          seqNotesRef.current[next],
-          SCALE_NAMES[scaleIdx],
-          rootIdx,
-        )
-        const frequency = midiToHz(quantized)
-        if (linked("seq-cv-out", "osc-voct-in") && oscNode.current)
-          oscNode.current.frequency.setTargetAtTime(
-            frequency,
-            ctx.current.currentTime,
-            0.01,
-          )
-        if (linked("seq-cv-out", "harmonic-v-oct-in")) {
-          ;[
-            ...harmonicOscillators.current,
-            ...harmonicWaveOscillators.current,
-          ].forEach((oscillator, index) =>
-            oscillator.frequency.setTargetAtTime(
-              frequency * (index < 8 ? index + 1 : 1),
-              ctx.current!.currentTime,
-              0.01,
-            ),
-          )
-        }
-      }
-      if (linked("seq-gate-out", "adsr-gate-in")) triggerADSR()
-      return next
-    })
+    sequencerClockTick()
     setClockBeat(true)
     setTimeout(() => setClockBeat(false), 80)
-  }, [scaleIdx, rootIdx, linked, triggerADSR])
+  }, [sequencerClockTick])
 
-  useEffect(() => {
-    seqNotesRef.current = seqNotes
-  }, [seqNotes])
+  const handleSequencerOutput = useCallback(
+    (output: {
+      cv: number
+      gate: boolean
+      slide: boolean
+      ratchet: number
+    }) => {
+      const ac = ctx.current
+      if (!ac) return
+      const now = ac.currentTime
+      seqCvSource.current?.offset.setTargetAtTime(
+        output.cv,
+        now,
+        output.slide ? 0.04 : 0.005,
+      )
+      seqGateSource.current?.offset.setTargetAtTime(
+        output.gate ? 1 : 0,
+        now,
+        0.001,
+      )
+      if (
+        linked("seq-cv-out", "osc-voct-in") &&
+        oscNode.current
+      ) {
+        oscNode.current.frequency.setTargetAtTime(
+          midiToHz(60 + output.cv * 12),
+          now,
+          output.slide ? 0.04 : 0.005,
+        )
+      }
+      // Ratchet subdivision is handled by the audio side consuming this externally clocked step.
+      if (output.gate && linked("seq-gate-out", "adsr-gate-in")) triggerADSR()
+    },
+    [linked, triggerADSR],
+  )
 
   // ── Clock interval ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2838,16 +2848,26 @@ export default function RackContainer() {
               seqNotes={seqNotes}
               scaleIdx={scaleIdx}
               rootIdx={rootIdx}
-              onScaleChange={setScaleIdx}
-              onRootChange={setRootIdx}
+              onScaleChange={(index) =>
+                sequencer.dispatch({
+                  type: "SET_SCALE",
+                  value: SCALE_NAMES[index],
+                })
+              }
+              onRootChange={(index) =>
+                sequencer.dispatch({ type: "SET_ROOT", value: index })
+              }
               onNoteChange={(index, value) =>
-                setSeqNotes((previous) => {
-                  const next = [...previous]
-                  next[index] = value
-                  return next
+                sequencer.dispatch({
+                  type: "SET_STEP_PARAM",
+                  index,
+                  key: "note",
+                  value,
                 })
               }
               mkPort={mkPort}
+              sequencer={sequencer}
+              onStepOut={handleSequencerOutput}
             />
             <LfoModule
               lfoRate={lfoRate}

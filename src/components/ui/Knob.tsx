@@ -9,6 +9,7 @@ export interface KnobProps {
   label: string
   sublabel: string
   size?: number
+  compact?: boolean
   scale?: "linear" | "log"
   onChange: (v: number) => void
 }
@@ -20,6 +21,7 @@ export function Knob({
   label,
   sublabel,
   size = 32,
+  compact = false,
   scale = "linear",
   onChange,
 }: KnobProps) {
@@ -72,13 +74,13 @@ export function Knob({
   return (
     <div
       className="flex flex-col items-center"
-      style={{ minWidth: size + 20, gap: "6px" }}
+      style={{ minWidth: compact ? size : size + 20, gap: compact ? "2px" : "6px" }}
     >
       {/* Label above knob */}
       <span
         style={{
           fontFamily: "var(--font-sans)",
-          fontSize: "9px",
+          fontSize: compact ? "8px" : "9px",
           fontWeight: 600,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
@@ -164,7 +166,7 @@ export function Knob({
       <span
         style={{
           fontFamily: "var(--font-mono)",
-          fontSize: "9px",
+          fontSize: compact ? "8px" : "9px",
           fontWeight: 500,
           letterSpacing: "0.02em",
           color: "var(--module-accent)",
